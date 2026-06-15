@@ -1,4 +1,18 @@
-# Nest Contracts
+<p align="center">
+  <img src="assets/nest-logo.png" alt="Nest logo" width="160" />
+</p>
+
+<h1 align="center">Nest Contracts</h1>
+
+<p align="center">
+  <strong>Where stocks become stable dollars</strong>
+</p>
+
+<p align="center">
+  nUSD is backed by tokenized equities and USDC. Stake into snUSD to earn variable protocol revenue.
+</p>
+
+---
 
 Solana programs for the Nest protocol.
 
