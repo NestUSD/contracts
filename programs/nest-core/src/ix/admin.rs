@@ -89,7 +89,19 @@ pub fn set_psm_kamino_collateral_vault(ctx: Context<SetPsmKaminoCollateralVault>
     require!(
         ctx.accounts.protocol.psm_kamino_collateral_vault == Pubkey::default()
             && ctx.accounts.protocol.psm_kamino_deployed_usdc == 0
-            && ctx.accounts.protocol_kamino_collateral_vault.amount == 0,
+            && ctx.accounts.protocol_kamino_collateral_vault.amount == 0
+            && ctx.accounts.protocol_kamino_collateral_vault.key()
+                != ctx.accounts.protocol.psm_usdc_vault
+            && ctx.accounts.protocol_kamino_collateral_vault.key()
+                != ctx.accounts.protocol.insurance_nusd_vault
+            && ctx.accounts.protocol_kamino_collateral_vault.key()
+                != ctx.accounts.protocol.staker_revenue_nusd_vault
+            && ctx.accounts.protocol_kamino_collateral_vault.key()
+                != ctx.accounts.protocol.protocol_revenue_nusd_vault
+            && ctx.accounts.protocol_kamino_collateral_vault.mint
+                != ctx.accounts.protocol.usdc_mint
+            && ctx.accounts.protocol_kamino_collateral_vault.mint
+                != ctx.accounts.protocol.nusd_mint,
         CoreError::InvalidParameter
     );
     ctx.accounts.protocol.psm_kamino_collateral_vault =
