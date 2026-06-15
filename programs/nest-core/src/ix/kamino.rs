@@ -3,7 +3,7 @@ use crate::*;
 pub fn rebalance_psm_usdc_to_kamino(ctx: Context<PsmKamino>, max_amount: u64) -> Result<()> {
     require!(max_amount > 0, CoreError::InvalidParameter);
     require!(!ctx.accounts.protocol.paused, CoreError::Paused);
-    assert_kamino_psm_accounts(&ctx.accounts)?;
+    assert_kamino_psm_accounts(ctx.accounts)?;
 
     let protocol = &ctx.accounts.protocol;
     let target_deployed =
@@ -27,9 +27,9 @@ pub fn rebalance_psm_usdc_to_kamino(ctx: Context<PsmKamino>, max_amount: u64) ->
     let psm_vault_before = ctx.accounts.psm_usdc_vault.amount;
     let kamino_collateral_before = ctx.accounts.protocol_kamino_collateral_vault.amount;
 
-    invoke_klend_refresh_reserve(&psm_kamino_cpi_accounts(&ctx.accounts))?;
+    invoke_klend_refresh_reserve(&psm_kamino_cpi_accounts(ctx.accounts))?;
     invoke_klend_deposit_reserve_liquidity(
-        &psm_kamino_cpi_accounts(&ctx.accounts),
+        &psm_kamino_cpi_accounts(ctx.accounts),
         amount,
         signer_seeds,
     )?;
@@ -63,7 +63,7 @@ pub fn rebalance_psm_usdc_to_kamino(ctx: Context<PsmKamino>, max_amount: u64) ->
 
 pub fn redeem_psm_usdc_from_kamino(ctx: Context<PsmKamino>, collateral_amount: u64) -> Result<()> {
     require!(collateral_amount > 0, CoreError::InvalidParameter);
-    assert_kamino_psm_accounts(&ctx.accounts)?;
+    assert_kamino_psm_accounts(ctx.accounts)?;
     require!(
         ctx.accounts.protocol.psm_kamino_deployed_usdc > 0,
         CoreError::PsmInsufficientLiquidity
@@ -74,9 +74,9 @@ pub fn redeem_psm_usdc_from_kamino(ctx: Context<PsmKamino>, collateral_amount: u
     let psm_vault_before = ctx.accounts.psm_usdc_vault.amount;
     let kamino_collateral_before = ctx.accounts.protocol_kamino_collateral_vault.amount;
 
-    invoke_klend_refresh_reserve(&psm_kamino_cpi_accounts(&ctx.accounts))?;
+    invoke_klend_refresh_reserve(&psm_kamino_cpi_accounts(ctx.accounts))?;
     invoke_klend_redeem_reserve_collateral(
-        &psm_kamino_cpi_accounts(&ctx.accounts),
+        &psm_kamino_cpi_accounts(ctx.accounts),
         collateral_amount,
         signer_seeds,
     )?;
@@ -130,7 +130,7 @@ pub fn realize_psm_kamino_yield(
         ctx.accounts.protocol.bad_debt_nusd == 0,
         CoreError::BadDebtOutstanding
     );
-    assert_kamino_psm_yield_accounts(&ctx.accounts)?;
+    assert_kamino_psm_yield_accounts(ctx.accounts)?;
     require!(
         ctx.accounts.protocol.psm_kamino_deployed_usdc > 0,
         CoreError::PsmInsufficientLiquidity
@@ -148,9 +148,9 @@ pub fn realize_psm_kamino_yield(
 
     // Redeem a slice, then prove the remaining cTokens still cover tracked
     // principal before treating the received USDC as yield.
-    invoke_klend_refresh_reserve(&psm_kamino_yield_cpi_accounts(&ctx.accounts))?;
+    invoke_klend_refresh_reserve(&psm_kamino_yield_cpi_accounts(ctx.accounts))?;
     invoke_klend_redeem_reserve_collateral(
-        &psm_kamino_yield_cpi_accounts(&ctx.accounts),
+        &psm_kamino_yield_cpi_accounts(ctx.accounts),
         collateral_amount,
         signer_seeds,
     )?;

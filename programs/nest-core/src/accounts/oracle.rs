@@ -1,18 +1,4 @@
 #[derive(Accounts)]
-pub struct RefreshPythOracle<'info> {
-    #[account(seeds = [b"protocol"], bump = protocol.bump)]
-    pub protocol: Box<Account<'info, Protocol>>,
-    #[account(has_one = protocol)]
-    pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(init_if_needed, payer = payer, space = 8 + OracleSnapshot::INIT_SPACE, seeds = [b"oracle", collateral_config.key().as_ref()], bump)]
-    pub oracle: Box<Account<'info, OracleSnapshot>>,
-    pub xstock_price_update: Box<Account<'info, PriceUpdateV2>>,
-    #[account(mut)]
-    pub payer: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
 pub struct RefreshLazerOracle<'info> {
     #[account(seeds = [b"protocol"], bump = protocol.bump)]
     pub protocol: Box<Account<'info, Protocol>>,

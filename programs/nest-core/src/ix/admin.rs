@@ -1,7 +1,90 @@
 use crate::*;
 
+const PROTOCOL_AUTHORITY_OFFSET: usize = 8;
+const PROTOCOL_LEN_BEFORE_CIRCUIT_BREAKER: usize = 643;
+const PROTOCOL_LEN_BEFORE_BUYBACK: usize = 710;
+const PROTOCOL_CURRENT_LEN: usize = 8 + Protocol::INIT_SPACE;
+const PROTOCOL_PSM_OUTFLOW_WINDOW_SECONDS_OFFSET: usize = 685;
+
+fn write_i64(data: &mut [u8], offset: usize, value: i64) -> Result<()> {
+    let end = offset
+        .checked_add(8)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(
+        end <= data.len(),
+        CoreError::InvalidProtocolAccountMigration
+    );
+    data[offset..end].copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
 pub fn set_paused(ctx: Context<MutateProtocol>, paused: bool) -> Result<()> {
     ctx.accounts.protocol.paused = paused;
+    Ok(())
+}
+
+pub fn migrate_protocol_account_layout(ctx: Context<MigrateProtocolAccountLayout>) -> Result<()> {
+    let protocol_info = ctx.accounts.protocol.to_account_info();
+    let current_len = protocol_info.data_len();
+    require!(
+        current_len == PROTOCOL_LEN_BEFORE_CIRCUIT_BREAKER
+            || current_len == PROTOCOL_LEN_BEFORE_BUYBACK
+            || current_len == PROTOCOL_CURRENT_LEN,
+        CoreError::InvalidProtocolAccountMigration
+    );
+
+    {
+        let data = protocol_info.try_borrow_data()?;
+        require!(
+            data.len() >= PROTOCOL_AUTHORITY_OFFSET + 32
+                && &data[..Protocol::DISCRIMINATOR.len()] == Protocol::DISCRIMINATOR,
+            CoreError::InvalidProtocolAccountMigration
+        );
+        let authority = Pubkey::new_from_array(
+            data[PROTOCOL_AUTHORITY_OFFSET..PROTOCOL_AUTHORITY_OFFSET + 32]
+                .try_into()
+                .map_err(|_| error!(CoreError::InvalidProtocolAccountMigration))?,
+        );
+        require_keys_eq!(
+            authority,
+            ctx.accounts.authority.key(),
+            CoreError::Unauthorized
+        );
+    }
+
+    if current_len == PROTOCOL_CURRENT_LEN {
+        return Ok(());
+    }
+
+    let rent = Rent::get()?;
+    let required_lamports = rent.minimum_balance(PROTOCOL_CURRENT_LEN);
+    let current_lamports = protocol_info.lamports();
+    if current_lamports < required_lamports {
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                anchor_lang::system_program::Transfer {
+                    from: ctx.accounts.authority.to_account_info(),
+                    to: protocol_info.clone(),
+                },
+            ),
+            required_lamports
+                .checked_sub(current_lamports)
+                .ok_or(error!(CoreError::MathOverflow))?,
+        )?;
+    }
+
+    protocol_info.resize(PROTOCOL_CURRENT_LEN)?;
+
+    if current_len == PROTOCOL_LEN_BEFORE_CIRCUIT_BREAKER {
+        let mut data = protocol_info.try_borrow_mut_data()?;
+        write_i64(
+            &mut data,
+            PROTOCOL_PSM_OUTFLOW_WINDOW_SECONDS_OFFSET,
+            SECONDS_PER_DAY,
+        )?;
+    }
+
     Ok(())
 }
 
@@ -188,10 +271,14 @@ pub fn set_collateral_oracle_params(
             && underlying_closed_market_max_staleness_seconds
                 <= UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS
             && closed_market_haircut_bps > 0
-            && closed_market_haircut_bps <= domain::BPS_DENOMINATOR as u16,
+            && closed_market_haircut_bps <= MAX_CLOSED_MARKET_HAIRCUT_BPS,
         CoreError::InvalidParameter
     );
-    validate_lazer_feed_config(&xstock_usd_feed_id)?;
+    validate_collateral_feed_config(
+        &xstock_usd_feed_id,
+        &underlying_usd_feed_id,
+        &redemption_rate_feed_id,
+    )?;
     ctx.accounts.collateral_config.xstock_usd_feed_id = xstock_usd_feed_id;
     ctx.accounts.collateral_config.underlying_usd_feed_id = underlying_usd_feed_id;
     ctx.accounts.collateral_config.redemption_rate_feed_id = redemption_rate_feed_id;

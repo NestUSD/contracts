@@ -3,12 +3,7 @@ use crate::{
     USD_SCALE,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MarketState {
-    Regular,
-    Extended,
-    Closed,
-}
+const MAX_ORACLE_FUTURE_SKEW_SECONDS: i64 = 60;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OraclePrice {
@@ -31,11 +26,9 @@ pub struct PricingInputs {
     pub underlying_usd: OraclePrice,
     pub redemption_rate: OraclePrice,
     pub now: i64,
-    pub market_state: MarketState,
     pub xstock_policy: PricePolicy,
     pub underlying_policy: PricePolicy,
     pub redemption_policy: PricePolicy,
-    pub closed_market_haircut_bps: u16,
 }
 
 pub fn lower_confidence_bound(price: OraclePrice, policy: PricePolicy, now: i64) -> Result<u128> {
@@ -51,10 +44,20 @@ pub fn lower_confidence_bound(price: OraclePrice, policy: PricePolicy, now: i64)
     if price.price_e8 == 0 {
         return Err(NestError::PriceNotPositive);
     }
-    let age = now
-        .checked_sub(price.publish_time)
+    let future_skew = price
+        .publish_time
+        .checked_sub(now)
         .ok_or(NestError::OracleStale)?;
-    if age < 0 || age > policy.max_staleness_seconds {
+    if future_skew > MAX_ORACLE_FUTURE_SKEW_SECONDS {
+        return Err(NestError::OracleStale);
+    }
+    let age = if future_skew > 0 {
+        0
+    } else {
+        now.checked_sub(price.publish_time)
+            .ok_or(NestError::OracleStale)?
+    };
+    if age > policy.max_staleness_seconds {
         return Err(NestError::OracleStale);
     }
     let price_u128 = price.price_e8 as u128;

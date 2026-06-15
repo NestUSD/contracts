@@ -29,26 +29,6 @@ pub struct Deposit<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Withdraw<'info> {
-    #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
-    pub protocol: Box<Account<'info, Protocol>>,
-    #[account(mut, has_one = protocol)]
-    pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
-    pub vault: Box<Account<'info, Vault>>,
-    #[account(address = collateral_config.collateral_mint)]
-    pub collateral_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, address = collateral_config.collateral_vault, token::mint = collateral_mint, token::authority = protocol, token::token_program = collateral_token_program)]
-    pub collateral_vault: InterfaceAccount<'info, TokenAccount>,
-    #[account(mut, token::mint = collateral_mint, token::authority = owner, token::token_program = collateral_token_program)]
-    pub owner_collateral_account: InterfaceAccount<'info, TokenAccount>,
-    pub xstock_price_update: Box<Account<'info, PriceUpdateV2>>,
-    pub owner: Signer<'info>,
-    #[account(address = collateral_config.token_program)]
-    pub collateral_token_program: Interface<'info, TokenInterface>,
-}
-
-#[derive(Accounts)]
 pub struct WithdrawWithOracle<'info> {
     #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
     pub protocol: Box<Account<'info, Protocol>>,
@@ -72,24 +52,6 @@ pub struct WithdrawWithOracle<'info> {
     pub owner: Signer<'info>,
     #[account(address = collateral_config.token_program)]
     pub collateral_token_program: Interface<'info, TokenInterface>,
-}
-
-#[derive(Accounts)]
-pub struct MintNusd<'info> {
-    #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
-    pub protocol: Box<Account<'info, Protocol>>,
-    #[account(mut, has_one = protocol)]
-    pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
-    pub vault: Box<Account<'info, Vault>>,
-    pub xstock_price_update: Box<Account<'info, PriceUpdateV2>>,
-    #[account(mut, address = protocol.nusd_mint)]
-    pub nusd_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, token::mint = nusd_mint, token::authority = owner, token::token_program = nusd_token_program)]
-    pub owner_nusd_account: InterfaceAccount<'info, TokenAccount>,
-    pub owner: Signer<'info>,
-    #[account(address = SPL_TOKEN_PROGRAM_ID)]
-    pub nusd_token_program: Interface<'info, TokenInterface>,
 }
 
 #[derive(Accounts)]

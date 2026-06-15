@@ -108,8 +108,8 @@ pub fn initialize_protocol(
     protocol.psm_outflow_window_basis_usdc = 0;
     protocol.buyback_authority = Pubkey::default();
     protocol.buyback_usdc_account = Pubkey::default();
-    protocol.insurance_target_bps = domain::INSURANCE_TARGET_BPS as u16;
-    protocol.insurance_fee_share_bps = domain::INSURANCE_FEE_SHARE_BPS as u16;
+    protocol.insurance_target_bps = domain::INSURANCE_TARGET_BPS;
+    protocol.insurance_fee_share_bps = domain::INSURANCE_FEE_SHARE_BPS;
     protocol.reserved = false;
     protocol.paused = false;
     protocol.bump = ctx.bumps.protocol;

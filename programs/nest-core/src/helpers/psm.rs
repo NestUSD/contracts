@@ -74,7 +74,7 @@ fn record_psm_outflow_or_pause(
         .psm_outflow_window_usdc
         .checked_add(amount)
         .ok_or(error!(CoreError::MathOverflow))?;
-    if next_window_usdc >= active_limit {
+    if next_window_usdc > active_limit {
         protocol.paused = true;
         return Ok(false);
     }

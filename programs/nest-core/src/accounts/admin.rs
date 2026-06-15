@@ -6,6 +6,17 @@ pub struct MutateProtocol<'info> {
 }
 
 #[derive(Accounts)]
+pub struct MigrateProtocolAccountLayout<'info> {
+    /// CHECK: Raw access is required because older deployed Protocol accounts cannot deserialize
+    /// into the current struct until this instruction reallocates them.
+    #[account(mut, seeds = [b"protocol"], bump, owner = crate::ID)]
+    pub protocol: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct SetStakerYieldParams<'info> {
     #[account(mut, seeds = [b"protocol"], bump = protocol.bump, has_one = authority)]
     pub protocol: Box<Account<'info, Protocol>>,

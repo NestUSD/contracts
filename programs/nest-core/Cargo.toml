@@ -25,4 +25,3 @@ anchor-lang = { workspace = true, features = ["init-if-needed"] }
 anchor-spl.workspace = true
 nest-domain.workspace = true
 pyth-lazer-solana-contract = { version = "0.8.0", features = ["cpi"] }
-pyth-solana-receiver-sdk = "=1.0.0"

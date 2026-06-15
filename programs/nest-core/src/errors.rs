@@ -40,8 +40,6 @@ pub enum CoreError {
     AmountOverflow,
     #[msg("token transfer fee or hook reduced received amount")]
     TransferFeeNotSupported,
-    #[msg("market calendar is expired")]
-    MarketCalendarExpired,
     #[msg("bad debt must be covered before routing psm surplus as yield")]
     BadDebtOutstanding,
     #[msg("insufficient protocol revenue")]
@@ -50,4 +48,6 @@ pub enum CoreError {
     InsufficientLiquidationProceeds,
     #[msg("psm outflow circuit breaker configuration is invalid")]
     InvalidPsmOutflowCircuitBreaker,
+    #[msg("protocol account layout cannot be migrated")]
+    InvalidProtocolAccountMigration,
 }

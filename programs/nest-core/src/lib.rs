@@ -10,15 +10,12 @@ use anchor_spl::token_interface::{
     self, BurnChecked, Mint, MintToChecked, TokenAccount, TokenInterface, TransferChecked,
 };
 use nest_domain as domain;
-use pyth_solana_receiver_sdk::price_update::{Price, PriceUpdateV2, VerificationLevel};
 
 declare_id!("HxbLPNuQD7KKDVQoSQgY1cLMLrsaoseT65Xoczh7zHQW");
 
 const NEST_STAKE_PROGRAM_ID: Pubkey = pubkey!("EdYg6JsyntWpf3WGofNWKzBYnQPEvWFZSzUNim3PLbhB");
 const KLEND_PROGRAM_ID: Pubkey = pubkey!("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 const KLEND_STAGING_PROGRAM_ID: Pubkey = pubkey!("SLendK7ySfcEzyaFqy93gDnD3RtrpXJcnRwb6zFHJSh");
-const PYTH_PUSH_ORACLE_PROGRAM_ID: Pubkey = pubkey!("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
-const PYTH_PRICE_FEED_SHARD_ID: u16 = 0;
 const KLEND_NULL_PUBKEY: Pubkey = Pubkey::new_from_array([
     11, 193, 238, 216, 208, 116, 241, 195, 55, 212, 76, 22, 75, 202, 40, 216, 76, 206, 27, 169,
     138, 64, 177, 28, 19, 90, 156, 0, 0, 0, 0, 0,
@@ -27,13 +24,11 @@ const STABLECOIN_DECIMALS: u8 = 6;
 const MAX_STABILITY_FEE_APR_BPS: u64 = 1_000;
 const MAX_STAKER_TARGET_APR_BPS: u64 = 2_000;
 const MAX_STAKER_CAPACITY_KAMINO_APR_BPS: u64 = 2_000;
-const MAX_CALENDAR_CLOSED_DAYS: usize = 64;
 const SECONDS_PER_DAY: i64 = 86_400;
 const CLOSED_MARKET_MAX_STALENESS_SECONDS: i64 = 86_400;
 const UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS: i64 = 5 * SECONDS_PER_DAY;
 const MAX_CLOSED_MARKET_HAIRCUT_BPS: u16 = 9_500;
 const MAX_XSTOCK_PRICE_STALENESS_SECONDS: i64 = 120;
-const PYTH_MIN_GUARDIAN_SIGNATURES: u8 = 5;
 const STAKING_STATE_DISCRIMINATOR: [u8; 8] = [152, 226, 234, 201, 202, 8, 155, 60];
 const STAKING_STATE_NUSD_MINT_OFFSET: usize = 40;
 const STAKING_STATE_STAKING_VAULT_NUSD_OFFSET: usize = 216;
@@ -73,10 +68,6 @@ pub mod nest_core {
         ix::setup::initialize_vault(ctx)
     }
 
-    pub fn refresh_pyth_oracle(ctx: Context<RefreshPythOracle>) -> Result<()> {
-        ix::oracle::refresh_pyth_oracle(ctx)
-    }
-
     pub fn refresh_lazer_oracle(
         ctx: Context<RefreshLazerOracle>,
         message_data: Vec<u8>,
@@ -91,26 +82,8 @@ pub mod nest_core {
         )
     }
 
-    pub fn initialize_market_calendar(
-        ctx: Context<InitializeMarketCalendar>,
-        params: MarketCalendarParams,
-    ) -> Result<()> {
-        ix::oracle::initialize_market_calendar(ctx, params)
-    }
-
-    pub fn update_market_calendar(
-        ctx: Context<MutateMarketCalendar>,
-        params: MarketCalendarParams,
-    ) -> Result<()> {
-        ix::oracle::update_market_calendar(ctx, params)
-    }
-
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         ix::cdp::deposit(ctx, amount)
-    }
-
-    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
-        ix::cdp::withdraw(ctx, amount)
     }
 
     pub fn withdraw_with_oracle(ctx: Context<WithdrawWithOracle>, amount: u64) -> Result<()> {
@@ -121,10 +94,6 @@ pub mod nest_core {
         ix::cdp::accrue_fee(ctx)
     }
 
-    pub fn mint_nusd(ctx: Context<MintNusd>, amount: u64) -> Result<()> {
-        ix::cdp::mint_nusd(ctx, amount)
-    }
-
     pub fn mint_nusd_with_oracle(ctx: Context<MintNusdWithOracle>, amount: u64) -> Result<()> {
         ix::cdp::mint_nusd_with_oracle(ctx, amount)
     }
@@ -133,19 +102,11 @@ pub mod nest_core {
         ix::cdp::repay_nusd(ctx, amount)
     }
 
-    pub fn liquidate(ctx: Context<Liquidate>, requested_repay: u64) -> Result<()> {
-        ix::liquidation::instant::liquidate(ctx, requested_repay)
-    }
-
     pub fn liquidate_with_oracle(
         ctx: Context<LiquidateWithOracle>,
         requested_repay: u64,
     ) -> Result<()> {
         ix::liquidation::instant::liquidate_with_oracle(ctx, requested_repay)
-    }
-
-    pub fn start_liquidation(ctx: Context<StartLiquidation>) -> Result<()> {
-        ix::liquidation::two_step::start_liquidation(ctx)
     }
 
     pub fn start_liquidation_with_oracle(ctx: Context<StartLiquidationWithOracle>) -> Result<()> {
@@ -211,6 +172,12 @@ pub mod nest_core {
 
     pub fn set_paused(ctx: Context<MutateProtocol>, paused: bool) -> Result<()> {
         ix::admin::set_paused(ctx, paused)
+    }
+
+    pub fn migrate_protocol_account_layout(
+        ctx: Context<MigrateProtocolAccountLayout>,
+    ) -> Result<()> {
+        ix::admin::migrate_protocol_account_layout(ctx)
     }
 
     pub fn set_psm_outflow_circuit_breaker(
@@ -336,7 +303,6 @@ include!("helpers/revenue.rs");
 include!("helpers/staking_reader.rs");
 include!("helpers/psm.rs");
 include!("helpers/kamino.rs");
-include!("helpers/market_calendar.rs");
 include!("helpers/errors.rs");
 
 #[cfg(test)]

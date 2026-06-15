@@ -32,13 +32,3 @@ pub struct AddCollateralParams {
     pub protocol_debt_cap: u128,
     pub deposit_cap_raw: u128,
 }
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct MarketCalendarParams {
-    pub valid_until_ts: i64,
-    pub regular_open_seconds: u32,
-    pub regular_close_seconds: u32,
-    pub extended_open_seconds: u32,
-    pub extended_close_seconds: u32,
-    pub closed_days: Vec<i64>,
-}

@@ -1,35 +1,5 @@
 use crate::*;
 
-pub fn refresh_pyth_oracle(ctx: Context<RefreshPythOracle>) -> Result<()> {
-    let clock = Clock::get()?;
-    require_pyth_core_feed_config(&ctx.accounts.collateral_config.xstock_usd_feed_id)?;
-    require_keys_eq!(
-        ctx.accounts.xstock_price_update.key(),
-        pyth_fixed_price_feed_account(ctx.accounts.collateral_config.xstock_usd_feed_id),
-        CoreError::InvalidParameter
-    );
-    let xstock_max_age = pyth_max_age(&ctx.accounts.collateral_config)?;
-    let oracle = &mut ctx.accounts.oracle;
-    oracle.protocol = ctx.accounts.protocol.key();
-    oracle.collateral_config = ctx.accounts.collateral_config.key();
-    oracle.xstock_usd = read_pyth_price(
-        &ctx.accounts.xstock_price_update,
-        ctx.accounts.collateral_config.xstock_usd_feed_id,
-        xstock_max_age,
-        &clock,
-    )?;
-    // Collateral is priced from the xStock/USD feed. The other feed slots are
-    // inactive under this pricing policy.
-    oracle.underlying_usd =
-        inactive_oracle_price(ctx.accounts.collateral_config.underlying_usd_feed_id);
-    oracle.redemption_rate =
-        inactive_oracle_price(ctx.accounts.collateral_config.redemption_rate_feed_id);
-    oracle.market_state = MarketStateAccount::Regular;
-    oracle.calendar_valid_until_ts = 0;
-    oracle.bump = ctx.bumps.oracle;
-    Ok(())
-}
-
 pub fn refresh_lazer_oracle(
     ctx: Context<RefreshLazerOracle>,
     message_data: Vec<u8>,
@@ -54,11 +24,8 @@ pub fn refresh_lazer_oracle(
         signature_index,
     )?;
     let verified = verified.get();
-    let mut xstock_usd = read_lazer_price(&verified.payload, &ctx.accounts.collateral_config)?;
+    let xstock_usd = read_lazer_price(&verified.payload, &ctx.accounts.collateral_config)?;
     let clock = Clock::get()?;
-    if xstock_usd.publish_time > clock.unix_timestamp {
-        xstock_usd.publish_time = clock.unix_timestamp;
-    }
     domain::safe_raw_token_price_e8(domain::PricingInputs {
         xstock_usd: to_domain_price(xstock_usd),
         underlying_usd: to_domain_price(inactive_oracle_price(
@@ -68,7 +35,6 @@ pub fn refresh_lazer_oracle(
             ctx.accounts.collateral_config.redemption_rate_feed_id,
         )),
         now: clock.unix_timestamp,
-        market_state: domain::MarketState::Regular,
         xstock_policy: policy(
             ctx.accounts.collateral_config.xstock_usd_feed_id,
             &ctx.accounts.collateral_config,
@@ -81,7 +47,6 @@ pub fn refresh_lazer_oracle(
             ctx.accounts.collateral_config.redemption_rate_feed_id,
             &ctx.accounts.collateral_config,
         )?,
-        closed_market_haircut_bps: ctx.accounts.collateral_config.closed_market_haircut_bps,
     })
     .map_err(map_core_error)?;
 
@@ -96,35 +61,5 @@ pub fn refresh_lazer_oracle(
     oracle.market_state = MarketStateAccount::Regular;
     oracle.calendar_valid_until_ts = 0;
     oracle.bump = ctx.bumps.oracle;
-    Ok(())
-}
-
-pub fn initialize_market_calendar(
-    ctx: Context<InitializeMarketCalendar>,
-    params: MarketCalendarParams,
-) -> Result<()> {
-    assert_authority(&ctx.accounts.protocol, &ctx.accounts.authority)?;
-    validate_market_calendar_params(&params, Clock::get()?.unix_timestamp)?;
-    apply_market_calendar_params(
-        &mut ctx.accounts.market_calendar,
-        ctx.accounts.protocol.key(),
-        params,
-        ctx.bumps.market_calendar,
-    );
-    Ok(())
-}
-
-pub fn update_market_calendar(
-    ctx: Context<MutateMarketCalendar>,
-    params: MarketCalendarParams,
-) -> Result<()> {
-    validate_market_calendar_params(&params, Clock::get()?.unix_timestamp)?;
-    let bump = ctx.accounts.market_calendar.bump;
-    apply_market_calendar_params(
-        &mut ctx.accounts.market_calendar,
-        ctx.accounts.protocol.key(),
-        params,
-        bump,
-    );
     Ok(())
 }

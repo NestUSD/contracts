@@ -130,20 +130,6 @@ pub struct OracleSnapshot {
     pub bump: u8,
 }
 
-#[account]
-#[derive(InitSpace)]
-pub struct MarketCalendar {
-    pub protocol: Pubkey,
-    pub valid_until_ts: i64,
-    pub regular_open_seconds: u32,
-    pub regular_close_seconds: u32,
-    pub extended_open_seconds: u32,
-    pub extended_close_seconds: u32,
-    #[max_len(MAX_CALENDAR_CLOSED_DAYS)]
-    pub closed_days: Vec<i64>,
-    pub bump: u8,
-}
-
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
 pub struct OraclePriceAccount {
     pub feed_id: [u8; 32],

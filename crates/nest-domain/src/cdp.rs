@@ -158,7 +158,9 @@ pub fn accrue_stability_fee(
     if now <= vault.last_accrual_ts {
         return Ok(0);
     }
-    let elapsed = (now - vault.last_accrual_ts) as u128;
+    let elapsed = now
+        .checked_sub(vault.last_accrual_ts)
+        .ok_or(NestError::MathOverflow)? as u128;
     let debt = vault.total_debt()?;
     if debt == 0 {
         vault.last_accrual_ts = now;
