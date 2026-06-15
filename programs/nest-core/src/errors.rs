@@ -48,6 +48,4 @@ pub enum CoreError {
     InsufficientLiquidationProceeds,
     #[msg("psm outflow circuit breaker configuration is invalid")]
     InvalidPsmOutflowCircuitBreaker,
-    #[msg("protocol account layout cannot be migrated")]
-    InvalidProtocolAccountMigration,
 }

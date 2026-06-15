@@ -174,12 +174,6 @@ pub mod nest_core {
         ix::admin::set_paused(ctx, paused)
     }
 
-    pub fn migrate_protocol_account_layout(
-        ctx: Context<MigrateProtocolAccountLayout>,
-    ) -> Result<()> {
-        ix::admin::migrate_protocol_account_layout(ctx)
-    }
-
     pub fn set_psm_outflow_circuit_breaker(
         ctx: Context<MutateProtocol>,
         enabled: bool,
