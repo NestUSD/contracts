@@ -1,0 +1,24 @@
+[toolchain]
+anchor_version = "0.31.1"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.mainnet]
+nest_core = "HxbLPNuQD7KKDVQoSQgY1cLMLrsaoseT65Xoczh7zHQW"
+nest_stake = "EdYg6JsyntWpf3WGofNWKzBYnQPEvWFZSzUNim3PLbhB"
+
+[programs.localnet]
+nest_core = "HxbLPNuQD7KKDVQoSQgY1cLMLrsaoseT65Xoczh7zHQW"
+nest_stake = "EdYg6JsyntWpf3WGofNWKzBYnQPEvWFZSzUNim3PLbhB"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npm run test:all"

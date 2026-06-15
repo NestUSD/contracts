@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "crates/nest-domain",
+    "programs/nest-core",
+    "programs/nest-stake",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "UNLICENSED"
+version = "0.1.0"
+
+[workspace.dependencies]
+anchor-lang = "0.31.1"
+anchor-spl = "0.31.1"
+nest-domain = { path = "crates/nest-domain" }
+
+[profile.release]
+overflow-checks = true

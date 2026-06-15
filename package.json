@@ -1,0 +1,20 @@
+{
+  "name": "@nest-labs/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:domain",
+    "test:domain": "cargo test -p nest-domain",
+    "check:programs": "cargo check -p nest-core && cargo check -p nest-stake",
+    "test:workspace": "cargo test --workspace",
+    "build:anchor": "anchor build",
+    "test:anchor": "anchor test --provider.cluster localnet"
+  },
+  "devDependencies": {
+    "@coral-xyz/anchor": "0.31.1",
+    "@solana/web3.js": "^1.98.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3"
+  }
+}
