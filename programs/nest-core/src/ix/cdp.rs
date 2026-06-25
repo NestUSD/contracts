@@ -10,6 +10,10 @@ pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         ctx.accounts.collateral_token_program.key(),
         CoreError::InvalidParameter
     );
+    require_recorded_amount_covered(
+        ctx.accounts.collateral_vault.amount,
+        config.total_deposits_raw,
+    )?;
     let amount_u128 = amount as u128;
     let total_deposits = config
         .total_deposits_raw
@@ -70,6 +74,10 @@ pub fn withdraw_with_oracle(ctx: Context<WithdrawWithOracle>, amount: u64) -> Re
         ctx.accounts.collateral_token_program.key(),
         CoreError::InvalidParameter
     );
+    require_recorded_amount_covered(
+        ctx.accounts.collateral_vault.amount,
+        config.total_deposits_raw,
+    )?;
     let current = ctx.accounts.vault.collateral_raw;
     require!(amount_u128 <= current, CoreError::InsufficientCollateral);
 
@@ -140,6 +148,15 @@ pub fn mint_nusd_with_oracle(ctx: Context<MintNusdWithOracle>, amount: u64) -> R
         &mut ctx.accounts.protocol,
         &mut ctx.accounts.collateral_config,
         Clock::get()?.unix_timestamp,
+    )?;
+    require_keys_eq!(
+        ctx.accounts.collateral_config.token_program,
+        ctx.accounts.collateral_token_program.key(),
+        CoreError::InvalidParameter
+    );
+    require_recorded_amount_covered(
+        ctx.accounts.collateral_vault.amount,
+        ctx.accounts.collateral_config.total_deposits_raw,
     )?;
     let collateral_value = collateral_value_for_raw_from_snapshot(
         &ctx.accounts.collateral_config,
@@ -241,6 +258,11 @@ pub fn repay_nusd(ctx: Context<RepayNusd>, amount: u64) -> Result<()> {
         now,
         staker_delta,
     )?;
+    let routed_fee = insurance_delta
+        .checked_add(staker_delta)
+        .and_then(|v| v.checked_add(protocol_delta))
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(routed_fee == out.fee_paid, CoreError::MathOverflow);
     let insurance_delta_u64 = u128_to_u64(insurance_delta)?;
     if insurance_delta_u64 > 0 {
         let insurance_vault_before = ctx.accounts.insurance_nusd_vault.amount;
@@ -328,6 +350,11 @@ pub fn repay_nusd(ctx: Context<RepayNusd>, amount: u64) -> Result<()> {
     require_recorded_amount_covered(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
+    )?;
+    require_recorded_staker_revenue_covered(
+        ctx.accounts.staker_revenue_nusd_vault.amount,
+        staking_assets,
+        ctx.accounts.protocol.realized_revenue_for_stakers,
     )?;
     require_recorded_amount_covered(
         ctx.accounts.protocol_revenue_nusd_vault.amount,

@@ -26,6 +26,10 @@ pub fn liquidate_with_oracle(
         &ctx.accounts.oracle,
         ctx.accounts.vault.collateral_raw,
     )?;
+    require_recorded_amount_covered(
+        ctx.accounts.collateral_vault.amount,
+        ctx.accounts.collateral_config.total_deposits_raw,
+    )?;
     let raw_price =
         raw_token_safe_price_from_snapshot(&ctx.accounts.collateral_config, &ctx.accounts.oracle)?;
     let debt_before = ctx.accounts.vault.total_debt()?;
@@ -105,6 +109,18 @@ pub fn liquidate_with_oracle(
         now,
         staker_delta,
     )?;
+    let routed_charge = insurance_delta
+        .checked_add(staker_delta)
+        .and_then(|amount| amount.checked_add(protocol_delta))
+        .ok_or(error!(CoreError::MathOverflow))?;
+    let expected_routed_charge = out
+        .fee_paid
+        .checked_add(out.staker_penalty_nusd)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(
+        routed_charge == expected_routed_charge,
+        CoreError::MathOverflow
+    );
     let insurance_nusd_before = ctx.accounts.insurance_nusd_vault.amount;
     let insurance_delta_u64 = u128_to_u64(insurance_delta)?;
     if insurance_delta_u64 > 0 {
@@ -267,6 +283,11 @@ pub fn liquidate_with_oracle(
     require_recorded_amount_covered(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
+    )?;
+    require_recorded_staker_revenue_covered(
+        ctx.accounts.staker_revenue_nusd_vault.amount,
+        staking_assets,
+        ctx.accounts.protocol.realized_revenue_for_stakers,
     )?;
     require_recorded_amount_covered(
         ctx.accounts.protocol_revenue_nusd_vault.amount,

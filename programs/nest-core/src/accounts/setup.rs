@@ -52,4 +52,3 @@ pub struct InitializeVault<'info> {
     pub owner: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
-

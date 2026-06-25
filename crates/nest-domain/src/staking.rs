@@ -143,7 +143,7 @@ impl StakingPool {
         if pending.shares == 0 || pending.shares > self.total_shares {
             return Err(NestError::InvalidParameter);
         }
-        if pending.shares == self.total_shares && self.unvested_revenue > 0 {
+        if self.unvested_revenue > 0 {
             return Err(NestError::CooldownActive);
         }
         let accounted = self.accounted_assets()?;

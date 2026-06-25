@@ -23,6 +23,10 @@ pub fn start_liquidation_with_oracle(ctx: Context<StartLiquidationWithOracle>) -
         &ctx.accounts.oracle,
         ctx.accounts.vault.collateral_raw,
     )?;
+    require_recorded_amount_covered(
+        ctx.accounts.collateral_vault.amount,
+        ctx.accounts.collateral_config.total_deposits_raw,
+    )?;
     let (_, full_liquidation) = domain::max_liquidation_repay(
         domain_vault(&ctx.accounts.vault),
         collateral_value,
@@ -40,6 +44,7 @@ pub fn start_liquidation_with_oracle(ctx: Context<StartLiquidationWithOracle>) -
     ctx.accounts.liquidation_receipt.liquidator = ctx.accounts.liquidator.key();
     ctx.accounts.liquidation_receipt.collateral_mint = ctx.accounts.collateral_mint.key();
     ctx.accounts.liquidation_receipt.collateral_raw = collateral_raw;
+    ctx.accounts.liquidation_receipt.min_settlement_usdc = collateral_value;
     ctx.accounts.liquidation_receipt.principal_debt = principal_debt;
     ctx.accounts.liquidation_receipt.accrued_fee = accrued_fee;
     ctx.accounts.liquidation_receipt.started_at_ts = now;
@@ -128,13 +133,17 @@ pub fn settle_liquidation_proceeds(
     );
     let principal_debt = ctx.accounts.liquidation_receipt.principal_debt;
     let accrued_fee = ctx.accounts.liquidation_receipt.accrued_fee;
-    // Settlement is where seized collateral becomes real backing: principal
-    // must return as USDC, and only the excess can become yield.
+    let min_settlement_usdc = ctx.accounts.liquidation_receipt.min_settlement_usdc;
+    let settlement_floor = core::cmp::max(principal_debt, min_settlement_usdc);
+    // Settlement is where seized collateral becomes real backing: the
+    // liquidator must return at least the conservative oracle value recorded at
+    // seizure time, with principal as the floor for underwater cases.
     require!(
-        usdc_amount as u128 >= principal_debt,
+        usdc_amount as u128 >= settlement_floor,
         CoreError::InsufficientLiquidationProceeds
     );
 
+    let liquidator_usdc_before = ctx.accounts.liquidator_usdc_account.amount;
     let psm_vault_before = ctx.accounts.psm_usdc_vault.amount;
     token_transfer_checked(
         ctx.accounts.usdc_token_program.to_account_info(),
@@ -146,7 +155,13 @@ pub fn settle_liquidation_proceeds(
         ctx.accounts.usdc_mint.decimals,
         &[],
     )?;
+    ctx.accounts.liquidator_usdc_account.reload()?;
     ctx.accounts.psm_usdc_vault.reload()?;
+    require_token_account_decrease(
+        liquidator_usdc_before,
+        ctx.accounts.liquidator_usdc_account.amount,
+        usdc_amount,
+    )?;
     require_token_account_increase(
         psm_vault_before,
         ctx.accounts.psm_usdc_vault.amount,
@@ -204,6 +219,10 @@ pub fn settle_liquidation_proceeds(
                 staking_assets,
                 Clock::get()?.unix_timestamp,
             )?;
+        require!(
+            minted_nusd_u64 == u128_to_u64(revenue_amount)?,
+            CoreError::MathOverflow
+        );
         let nusd_supply_before = ctx.accounts.nusd_mint.supply;
         let bump = [ctx.accounts.protocol.bump];
         let signer_seeds: &[&[&[u8]]] = &[&[b"protocol", &bump]];
@@ -270,6 +289,11 @@ pub fn settle_liquidation_proceeds(
         require_recorded_amount_covered(
             ctx.accounts.insurance_nusd_vault.amount,
             ctx.accounts.protocol.insurance_fund_nusd,
+        )?;
+        require_recorded_staker_revenue_covered(
+            ctx.accounts.staker_revenue_nusd_vault.amount,
+            staking_assets,
+            ctx.accounts.protocol.realized_revenue_for_stakers,
         )?;
         require_recorded_amount_covered(
             ctx.accounts.protocol_revenue_nusd_vault.amount,

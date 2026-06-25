@@ -48,6 +48,7 @@ All active collateral configs are Pyth Lazer based.
 | METAx | `DyfTEtcLohg5CiJtDSNBDY3TxTqijGrK4GKFCdAGjwUK` | `1824` |
 | NVDAx | `2U7GYGR23QMKiyBiHW6FaWEpKf2Wuxpm943Mv9R3H6Cz` | `1833` |
 | QQQx | `5KaX9SwdpnsVPa8JeZBXDFA6Q5xB3TEzCUVGBs78UFKA` | `1837` |
-| SPCXx | `G8weptNqFYyVNmQtNprfieJDkFzZVrqgVZWMk2mHB7jN` | `99934` |
+| SPCXbp | `6QUvbdjRgoEJH92E8A7HzrBhpByNT5GCpGWzLn7pGyvx` | `3329` |
+| SPCXx | `G8weptNqFYyVNmQtNprfieJDkFzZVrqgVZWMk2mHB7jN` | `3329` |
 | SPYx | `D1xjj1JX1m2CmPm8hEuzZCj6mEqYpqAdGasqasH1drqm` | `1843` |
 | TSLAx | `C24fFBsQCpKvXMSyY2EaDKWva6fNeWMqipHv72qxkgXt` | `1847` |

@@ -14,6 +14,7 @@ use nest_domain as domain;
 declare_id!("HxbLPNuQD7KKDVQoSQgY1cLMLrsaoseT65Xoczh7zHQW");
 
 const NEST_STAKE_PROGRAM_ID: Pubkey = pubkey!("EdYg6JsyntWpf3WGofNWKzBYnQPEvWFZSzUNim3PLbhB");
+const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const KLEND_PROGRAM_ID: Pubkey = pubkey!("KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD");
 const KLEND_STAGING_PROGRAM_ID: Pubkey = pubkey!("SLendK7ySfcEzyaFqy93gDnD3RtrpXJcnRwb6zFHJSh");
 const KLEND_NULL_PUBKEY: Pubkey = Pubkey::new_from_array([
@@ -233,6 +234,18 @@ pub mod nest_core {
         withdraws_paused: bool,
     ) -> Result<()> {
         ix::admin::set_collateral_paused(ctx, deposits_paused, borrows_paused, withdraws_paused)
+    }
+
+    pub fn trip_collateral_vault_coverage_breaker(
+        ctx: Context<TripCollateralVaultCoverageBreaker>,
+    ) -> Result<()> {
+        ix::admin::trip_collateral_vault_coverage_breaker(ctx)
+    }
+
+    pub fn trip_collateral_emergency_breaker(
+        ctx: Context<TripCollateralEmergencyBreaker>,
+    ) -> Result<()> {
+        ix::admin::trip_collateral_emergency_breaker(ctx)
     }
 
     pub fn set_collateral_risk_params(

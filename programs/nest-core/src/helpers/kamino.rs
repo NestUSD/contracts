@@ -108,6 +108,11 @@ fn assert_kamino_psm_cpi_accounts(accounts: &PsmKaminoCpiAccounts<'_, '_>) -> Re
         accounts.token_program.key(),
         CoreError::InvalidParameter
     );
+    require_keys_eq!(
+        *accounts.reserve_liquidity_supply.owner,
+        accounts.token_program.key(),
+        CoreError::InvalidParameter
+    );
 
     let reserve_data = accounts.reserve.try_borrow_data()?;
     let reserve_lending_market = read_klend_reserve_pubkey(
@@ -351,6 +356,15 @@ mod kamino_helper_tests {
         data[offset..end].copy_from_slice(value.as_ref());
     }
 
+    fn test_account_info<'a>(
+        key: &'a Pubkey,
+        owner: &'a Pubkey,
+        lamports: &'a mut u64,
+        data: &'a mut [u8],
+    ) -> AccountInfo<'a> {
+        AccountInfo::new(key, false, false, lamports, data, owner, false, 0)
+    }
+
     #[test]
     fn reads_klend_reserve_pubkeys_at_expected_offsets() {
         let lending_market = key(1);
@@ -448,5 +462,85 @@ mod kamino_helper_tests {
             key(9),
             KLEND_PROGRAM_ID
         ));
+    }
+
+    #[test]
+    fn optional_klend_refresh_accounts_keep_meta_info_alignment() {
+        let owner = key(200);
+        let kamino_program_id = KLEND_PROGRAM_ID;
+
+        for disabled_oracle_key in [
+            Pubkey::default(),
+            KLEND_NULL_PUBKEY,
+            kamino_program_id,
+        ] {
+            let mut account_metas = Vec::new();
+            let mut account_infos = Vec::new();
+            let mut oracle_lamports = 0;
+            let mut oracle_data = [0_u8; 0];
+            let mut kamino_lamports = 0;
+            let mut kamino_data = [0_u8; 0];
+
+            push_klend_optional_refresh_account(
+                &mut account_metas,
+                &mut account_infos,
+                test_account_info(
+                    &disabled_oracle_key,
+                    &owner,
+                    &mut oracle_lamports,
+                    &mut oracle_data,
+                ),
+                test_account_info(
+                    &kamino_program_id,
+                    &owner,
+                    &mut kamino_lamports,
+                    &mut kamino_data,
+                ),
+                kamino_program_id,
+            );
+
+            assert_eq!(account_metas.len(), 1);
+            assert_eq!(account_infos.len(), 1);
+            assert_eq!(account_metas[0].pubkey, kamino_program_id);
+            assert!(!account_metas[0].is_signer);
+            assert!(!account_metas[0].is_writable);
+            assert_eq!(*account_infos[0].key, kamino_program_id);
+        }
+
+        let oracle_key = key(9);
+        let mut account_metas = Vec::new();
+        let mut account_infos = Vec::new();
+        let mut oracle_lamports = 0;
+        let mut oracle_data = [0_u8; 0];
+        let mut kamino_lamports = 0;
+        let mut kamino_data = [0_u8; 0];
+
+        push_klend_optional_refresh_account(
+            &mut account_metas,
+            &mut account_infos,
+            test_account_info(&oracle_key, &owner, &mut oracle_lamports, &mut oracle_data),
+            test_account_info(
+                &kamino_program_id,
+                &owner,
+                &mut kamino_lamports,
+                &mut kamino_data,
+            ),
+            kamino_program_id,
+        );
+
+        assert_eq!(account_metas.len(), 1);
+        assert_eq!(account_infos.len(), 1);
+        assert_eq!(account_metas[0].pubkey, oracle_key);
+        assert!(!account_metas[0].is_signer);
+        assert!(!account_metas[0].is_writable);
+        assert_eq!(*account_infos[0].key, oracle_key);
+    }
+
+    #[test]
+    fn kamino_program_allowlist_rejects_attacker_programs() {
+        assert!(valid_kamino_program_id(KLEND_PROGRAM_ID));
+        assert!(valid_kamino_program_id(KLEND_STAGING_PROGRAM_ID));
+        assert!(!valid_kamino_program_id(Pubkey::default()));
+        assert!(!valid_kamino_program_id(key(42)));
     }
 }

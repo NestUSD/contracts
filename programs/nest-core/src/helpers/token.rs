@@ -79,6 +79,17 @@ fn u128_to_u64(amount: u128) -> Result<u64> {
     u64::try_from(amount).map_err(|_| error!(CoreError::AmountOverflow))
 }
 
+fn require_token_account_unencumbered(account: &InterfaceAccount<TokenAccount>) -> Result<()> {
+    require!(
+        account.delegate == COption::None
+            && account.delegated_amount == 0
+            && account.close_authority == COption::None
+            && account.is_native == COption::None,
+        CoreError::InvalidParameter
+    );
+    Ok(())
+}
+
 fn require_token_account_increase(before: u64, after: u64, expected_delta: u64) -> Result<()> {
     let expected_after = before
         .checked_add(expected_delta)
@@ -116,5 +127,17 @@ fn require_recorded_amount_covered(actual_amount: u64, recorded_amount: u128) ->
         (actual_amount as u128) >= recorded_amount,
         CoreError::InvalidParameter
     );
+    Ok(())
+}
+
+fn require_recorded_staker_revenue_covered(
+    unharvested_revenue: u64,
+    staking_assets: u128,
+    recorded_revenue: u128,
+) -> Result<()> {
+    let covered_assets = (unharvested_revenue as u128)
+        .checked_add(staking_assets)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(covered_assets >= recorded_revenue, CoreError::InvalidParameter);
     Ok(())
 }

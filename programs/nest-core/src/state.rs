@@ -111,6 +111,7 @@ pub struct LiquidationReceipt {
     pub liquidator: Pubkey,
     pub collateral_mint: Pubkey,
     pub collateral_raw: u128,
+    pub min_settlement_usdc: u128,
     pub principal_debt: u128,
     pub accrued_fee: u128,
     pub started_at_ts: i64,

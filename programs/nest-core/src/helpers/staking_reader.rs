@@ -3,7 +3,14 @@ fn staking_vault_nusd_from_account(
     expected_nusd_mint: Pubkey,
 ) -> Result<u128> {
     // Core cannot deserialize nest-stake accounts directly, so it reads the one
-    // field it needs by offset after checking owner, discriminator, and nUSD mint.
+    // field it needs by offset after checking PDA, owner, discriminator, and nUSD mint.
+    let (expected_staking_state, _) =
+        Pubkey::find_program_address(&[b"staking"], &NEST_STAKE_PROGRAM_ID);
+    require_keys_eq!(
+        staking_state.key(),
+        expected_staking_state,
+        CoreError::InvalidParameter
+    );
     require_keys_eq!(
         *staking_state.owner,
         NEST_STAKE_PROGRAM_ID,

@@ -22,6 +22,16 @@ pub fn initialize_protocol(
             && ctx.accounts.protocol_revenue_nusd_vault.amount == 0,
         CoreError::InvalidParameter
     );
+    require_token_account_unencumbered(&ctx.accounts.psm_usdc_vault)?;
+    require_token_account_unencumbered(&ctx.accounts.insurance_nusd_vault)?;
+    require_token_account_unencumbered(&ctx.accounts.staker_revenue_nusd_vault)?;
+    require_token_account_unencumbered(&ctx.accounts.protocol_revenue_nusd_vault)?;
+    require_distinct_protocol_init_vaults(
+        ctx.accounts.psm_usdc_vault.key(),
+        ctx.accounts.insurance_nusd_vault.key(),
+        ctx.accounts.staker_revenue_nusd_vault.key(),
+        ctx.accounts.protocol_revenue_nusd_vault.key(),
+    )?;
     require!(
         ctx.accounts.nusd_mint.decimals == STABLECOIN_DECIMALS
             && ctx.accounts.usdc_mint.decimals == STABLECOIN_DECIMALS,
@@ -145,6 +155,7 @@ pub fn add_collateral(ctx: Context<AddCollateral>, params: AddCollateralParams) 
                 <= UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS
             && params.closed_market_haircut_bps > 0
             && params.closed_market_haircut_bps <= MAX_CLOSED_MARKET_HAIRCUT_BPS
+            && valid_collateral_token_program(params.token_program)
             && params.per_vault_debt_cap > 0
             && params.protocol_debt_cap > 0
             && params.deposit_cap_raw > 0,
@@ -155,11 +166,18 @@ pub fn add_collateral(ctx: Context<AddCollateral>, params: AddCollateralParams) 
             && ctx.accounts.collateral_vault.key() != ctx.accounts.insurance_collateral_vault.key(),
         CoreError::InvalidParameter
     );
+    require_no_protocol_value_vault_aliases(
+        &ctx.accounts.protocol,
+        ctx.accounts.collateral_vault.key(),
+        ctx.accounts.insurance_collateral_vault.key(),
+    )?;
     require!(
         ctx.accounts.collateral_vault.amount == 0
             && ctx.accounts.insurance_collateral_vault.amount == 0,
         CoreError::InvalidParameter
     );
+    require_token_account_unencumbered(&ctx.accounts.collateral_vault)?;
+    require_token_account_unencumbered(&ctx.accounts.insurance_collateral_vault)?;
     require_keys_eq!(
         *ctx.accounts.collateral_mint.to_account_info().owner,
         ctx.accounts.collateral_token_program.key(),
@@ -208,4 +226,48 @@ pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
     vault.last_accrual_ts = Clock::get()?.unix_timestamp;
     vault.bump = ctx.bumps.vault;
     Ok(())
+}
+
+pub(crate) fn require_no_protocol_value_vault_aliases(
+    protocol: &Protocol,
+    collateral_vault: Pubkey,
+    insurance_collateral_vault: Pubkey,
+) -> Result<()> {
+    let market_vaults = [collateral_vault, insurance_collateral_vault];
+    let protocol_value_vaults = [
+        protocol.psm_usdc_vault,
+        protocol.insurance_nusd_vault,
+        protocol.staker_revenue_nusd_vault,
+        protocol.protocol_revenue_nusd_vault,
+    ];
+    for market_vault in market_vaults {
+        for protocol_vault in protocol_value_vaults {
+            require_keys_neq!(market_vault, protocol_vault, CoreError::InvalidParameter);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn require_distinct_protocol_init_vaults(
+    psm_usdc_vault: Pubkey,
+    insurance_nusd_vault: Pubkey,
+    staker_revenue_nusd_vault: Pubkey,
+    protocol_revenue_nusd_vault: Pubkey,
+) -> Result<()> {
+    let vaults = [
+        psm_usdc_vault,
+        insurance_nusd_vault,
+        staker_revenue_nusd_vault,
+        protocol_revenue_nusd_vault,
+    ];
+    for i in 0..vaults.len() {
+        for j in (i + 1)..vaults.len() {
+            require_keys_neq!(vaults[i], vaults[j], CoreError::InvalidParameter);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn valid_collateral_token_program(token_program: Pubkey) -> bool {
+    token_program == SPL_TOKEN_PROGRAM_ID || token_program == TOKEN_2022_PROGRAM_ID
 }

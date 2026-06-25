@@ -32,10 +32,16 @@ fn staking_capacity_from_protocol(
     expected_nusd_mint: Pubkey,
 ) -> Result<Option<u128>> {
     // Staking reads only the core economics fields it needs to cap deposits.
-    // Owner, discriminator, and nUSD mint checks guard the fixed offsets.
+    // PDA, owner, discriminator, and nUSD mint checks guard the fixed offsets.
     require_keys_eq!(
         *protocol.owner,
         NEST_CORE_PROGRAM_ID,
+        StakeError::InvalidParameter
+    );
+    let (expected_protocol, _) = Pubkey::find_program_address(&[b"protocol"], &NEST_CORE_PROGRAM_ID);
+    require_keys_eq!(
+        protocol.key(),
+        expected_protocol,
         StakeError::InvalidParameter
     );
     let data = protocol.try_borrow_data()?;
@@ -226,6 +232,17 @@ fn u128_to_u64(amount: u128) -> Result<u64> {
     u64::try_from(amount).map_err(|_| error!(StakeError::AmountOverflow))
 }
 
+fn require_token_account_unencumbered(account: &InterfaceAccount<TokenAccount>) -> Result<()> {
+    require!(
+        account.delegate == COption::None
+            && account.delegated_amount == 0
+            && account.close_authority == COption::None
+            && account.is_native == COption::None,
+        StakeError::InvalidParameter
+    );
+    Ok(())
+}
+
 fn require_token_account_increase(before: u64, after: u64, expected_delta: u64) -> Result<()> {
     let expected_after = before
         .checked_add(expected_delta)
@@ -255,6 +272,14 @@ fn require_mint_supply_decrease(before: u64, after: u64, expected_delta: u64) ->
         .checked_sub(expected_delta)
         .ok_or(error!(StakeError::TransferFeeNotSupported))?;
     require!(after == expected_after, StakeError::TransferFeeNotSupported);
+    Ok(())
+}
+
+fn require_recorded_staking_vault_covered(actual_amount: u64, recorded_amount: u128) -> Result<()> {
+    require!(
+        actual_amount as u128 >= recorded_amount,
+        StakeError::InsufficientAssets
+    );
     Ok(())
 }
 

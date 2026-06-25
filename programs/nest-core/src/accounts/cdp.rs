@@ -4,7 +4,7 @@ pub struct MutateVault<'info> {
     pub protocol: Box<Account<'info, Protocol>>,
     #[account(mut, has_one = protocol)]
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
+    #[account(mut, has_one = owner, has_one = collateral_config, seeds = [b"vault", owner.key().as_ref(), collateral_config.key().as_ref()], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     pub owner: Signer<'info>,
 }
@@ -15,7 +15,7 @@ pub struct Deposit<'info> {
     pub protocol: Box<Account<'info, Protocol>>,
     #[account(mut, has_one = protocol)]
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
+    #[account(mut, has_one = owner, has_one = collateral_config, seeds = [b"vault", owner.key().as_ref(), collateral_config.key().as_ref()], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(address = collateral_config.collateral_mint)]
     pub collateral_mint: InterfaceAccount<'info, Mint>,
@@ -34,7 +34,7 @@ pub struct WithdrawWithOracle<'info> {
     pub protocol: Box<Account<'info, Protocol>>,
     #[account(mut, has_one = protocol)]
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
+    #[account(mut, has_one = owner, has_one = collateral_config, seeds = [b"vault", owner.key().as_ref(), collateral_config.key().as_ref()], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(
         has_one = protocol,
@@ -60,7 +60,7 @@ pub struct MintNusdWithOracle<'info> {
     pub protocol: Box<Account<'info, Protocol>>,
     #[account(mut, has_one = protocol)]
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
+    #[account(mut, has_one = owner, has_one = collateral_config, seeds = [b"vault", owner.key().as_ref(), collateral_config.key().as_ref()], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(
         has_one = protocol,
@@ -69,11 +69,17 @@ pub struct MintNusdWithOracle<'info> {
         bump = oracle.bump
     )]
     pub oracle: Box<Account<'info, OracleSnapshot>>,
+    #[account(address = collateral_config.collateral_mint)]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, address = collateral_config.collateral_vault, token::mint = collateral_mint, token::authority = protocol, token::token_program = collateral_token_program)]
+    pub collateral_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, address = protocol.nusd_mint)]
     pub nusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, token::mint = nusd_mint, token::authority = owner, token::token_program = nusd_token_program)]
     pub owner_nusd_account: InterfaceAccount<'info, TokenAccount>,
     pub owner: Signer<'info>,
+    #[account(address = collateral_config.token_program)]
+    pub collateral_token_program: Interface<'info, TokenInterface>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
 }
@@ -84,7 +90,7 @@ pub struct RepayNusd<'info> {
     pub protocol: Box<Account<'info, Protocol>>,
     #[account(mut, has_one = protocol)]
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
-    #[account(mut, has_one = owner, has_one = collateral_config)]
+    #[account(mut, has_one = owner, has_one = collateral_config, seeds = [b"vault", owner.key().as_ref(), collateral_config.key().as_ref()], bump = vault.bump)]
     pub vault: Box<Account<'info, Vault>>,
     #[account(mut, address = protocol.nusd_mint)]
     pub nusd_mint: Box<InterfaceAccount<'info, Mint>>,

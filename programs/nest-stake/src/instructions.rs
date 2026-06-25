@@ -24,6 +24,8 @@ pub fn initialize_staking(
             && ctx.accounts.revenue_nusd_vault.amount == 0,
         StakeError::InvalidParameter
     );
+    require_token_account_unencumbered(&ctx.accounts.staking_nusd_vault)?;
+    require_token_account_unencumbered(&ctx.accounts.revenue_nusd_vault)?;
     require_keys_eq!(
         *ctx.accounts.nusd_mint.to_account_info().owner,
         ctx.accounts.nusd_token_program.key(),
@@ -108,6 +110,10 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
         ctx.accounts.staking_nusd_vault.amount,
         amount,
     )?;
+    require_recorded_staking_vault_covered(
+        ctx.accounts.staking_nusd_vault.amount,
+        ctx.accounts.staking_state.staking_vault_nusd,
+    )?;
     let minted_shares_u64 = u128_to_u64(minted_shares)?;
     let owner_snusd_before = ctx.accounts.owner_snusd_account.amount;
     let snusd_supply_before = ctx.accounts.snusd_mint.supply;
@@ -178,6 +184,10 @@ pub fn harvest(ctx: Context<Harvest>, amount: u64) -> Result<()> {
         staking_vault_before,
         ctx.accounts.staking_nusd_vault.amount,
         amount,
+    )?;
+    require_recorded_staking_vault_covered(
+        ctx.accounts.staking_nusd_vault.amount,
+        ctx.accounts.staking_state.staking_vault_nusd,
     )?;
     Ok(())
 }
@@ -278,6 +288,10 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
         ctx.accounts.owner_nusd_account.amount,
         redeemed_assets,
     )?;
+    require_recorded_staking_vault_covered(
+        ctx.accounts.staking_nusd_vault.amount,
+        ctx.accounts.staking_state.staking_vault_nusd,
+    )?;
     Ok(())
 }
 
@@ -314,6 +328,10 @@ pub fn realize_loss(ctx: Context<RealizeLoss>, amount: u64) -> Result<()> {
         amount,
     )?;
     require_mint_supply_decrease(nusd_supply_before, ctx.accounts.nusd_mint.supply, amount)?;
+    require_recorded_staking_vault_covered(
+        ctx.accounts.staking_nusd_vault.amount,
+        ctx.accounts.staking_state.staking_vault_nusd,
+    )?;
     Ok(())
 }
 

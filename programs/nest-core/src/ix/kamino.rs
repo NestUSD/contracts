@@ -100,6 +100,16 @@ pub fn redeem_psm_usdc_from_kamino(ctx: Context<PsmKamino>, collateral_amount: u
         usdc_received as u128,
         ctx.accounts.protocol.psm_kamino_deployed_usdc,
     );
+    let redeemed_surplus = (usdc_received as u128)
+        .checked_sub(principal_return)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(
+        principal_return
+            .checked_add(redeemed_surplus)
+            .ok_or(error!(CoreError::MathOverflow))?
+            == usdc_received as u128,
+        CoreError::MathOverflow
+    );
     ctx.accounts.protocol.psm_kamino_deployed_usdc = ctx
         .accounts
         .protocol
@@ -260,6 +270,11 @@ pub fn realize_psm_kamino_yield(
     require_recorded_amount_covered(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
+    )?;
+    require_recorded_staker_revenue_covered(
+        ctx.accounts.staker_revenue_nusd_vault.amount,
+        staking_assets,
+        ctx.accounts.protocol.realized_revenue_for_stakers,
     )?;
     require_recorded_amount_covered(
         ctx.accounts.protocol_revenue_nusd_vault.amount,

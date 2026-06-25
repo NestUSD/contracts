@@ -104,6 +104,7 @@ pub fn set_psm_kamino_collateral_vault(ctx: Context<SetPsmKaminoCollateralVault>
                 != ctx.accounts.protocol.nusd_mint,
         CoreError::InvalidParameter
     );
+    require_token_account_unencumbered(&ctx.accounts.protocol_kamino_collateral_vault)?;
     ctx.accounts.protocol.psm_kamino_collateral_vault =
         ctx.accounts.protocol_kamino_collateral_vault.key();
     Ok(())
@@ -120,6 +121,16 @@ pub fn set_buyback_config(ctx: Context<SetBuybackConfig>, buyback_authority: Pub
         buyback_authority,
         CoreError::InvalidParameter
     );
+    require!(
+        ctx.accounts.buyback_usdc_account.key() != ctx.accounts.protocol.psm_usdc_vault
+            && ctx.accounts.buyback_usdc_account.key()
+                != ctx.accounts.protocol.insurance_nusd_vault
+            && ctx.accounts.buyback_usdc_account.key()
+                != ctx.accounts.protocol.staker_revenue_nusd_vault
+            && ctx.accounts.buyback_usdc_account.key()
+                != ctx.accounts.protocol.protocol_revenue_nusd_vault,
+        CoreError::InvalidParameter
+    );
     ctx.accounts.protocol.buyback_authority = buyback_authority;
     ctx.accounts.protocol.buyback_usdc_account = ctx.accounts.buyback_usdc_account.key();
     Ok(())
@@ -134,6 +145,29 @@ pub fn set_collateral_paused(
     ctx.accounts.collateral_config.deposits_paused = deposits_paused;
     ctx.accounts.collateral_config.borrows_paused = borrows_paused;
     ctx.accounts.collateral_config.withdraws_paused = withdraws_paused;
+    Ok(())
+}
+
+pub fn trip_collateral_vault_coverage_breaker(
+    ctx: Context<TripCollateralVaultCoverageBreaker>,
+) -> Result<()> {
+    require!(
+        (ctx.accounts.collateral_vault.amount as u128)
+            < ctx.accounts.collateral_config.total_deposits_raw,
+        CoreError::InvalidParameter
+    );
+    ctx.accounts.collateral_config.deposits_paused = true;
+    ctx.accounts.collateral_config.borrows_paused = true;
+    ctx.accounts.collateral_config.withdraws_paused = true;
+    Ok(())
+}
+
+pub fn trip_collateral_emergency_breaker(
+    ctx: Context<TripCollateralEmergencyBreaker>,
+) -> Result<()> {
+    ctx.accounts.collateral_config.deposits_paused = true;
+    ctx.accounts.collateral_config.borrows_paused = true;
+    ctx.accounts.collateral_config.withdraws_paused = true;
     Ok(())
 }
 

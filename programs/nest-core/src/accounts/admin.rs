@@ -47,3 +47,27 @@ pub struct MutateCollateral<'info> {
     pub collateral_config: Box<Account<'info, CollateralConfig>>,
     pub authority: Signer<'info>,
 }
+
+#[derive(Accounts)]
+pub struct TripCollateralVaultCoverageBreaker<'info> {
+    #[account(seeds = [b"protocol"], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    #[account(mut, has_one = protocol)]
+    pub collateral_config: Box<Account<'info, CollateralConfig>>,
+    #[account(address = collateral_config.collateral_mint)]
+    pub collateral_mint: InterfaceAccount<'info, Mint>,
+    #[account(address = collateral_config.collateral_vault, token::mint = collateral_mint, token::authority = protocol, token::token_program = collateral_token_program)]
+    pub collateral_vault: InterfaceAccount<'info, TokenAccount>,
+    #[account(address = collateral_config.token_program)]
+    pub collateral_token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
+pub struct TripCollateralEmergencyBreaker<'info> {
+    #[account(seeds = [b"protocol"], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    #[account(mut, has_one = protocol)]
+    pub collateral_config: Box<Account<'info, CollateralConfig>>,
+    #[account(address = protocol.liquidation_authority)]
+    pub liquidator: Signer<'info>,
+}
