@@ -9,7 +9,8 @@
     "check:programs": "cargo check -p nest-core && cargo check -p nest-stake",
     "test:workspace": "cargo test --workspace",
     "build:anchor": "anchor build",
-    "test:anchor": "anchor test --provider.cluster localnet"
+    "test:anchor": "anchor test --provider.cluster localnet",
+    "setup:backpack-stocks": "node scripts/setup-backpack-signed-stocks-mainnet.mjs"
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.31.1",
