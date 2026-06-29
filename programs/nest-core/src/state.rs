@@ -131,6 +131,15 @@ pub struct OracleSnapshot {
     pub bump: u8,
 }
 
+#[account]
+#[derive(InitSpace)]
+pub struct NestPriceSignerConfig {
+    pub protocol: Pubkey,
+    pub authority: Pubkey,
+    pub signer: Pubkey,
+    pub bump: u8,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq, InitSpace)]
 pub struct OraclePriceAccount {
     pub feed_id: [u8; 32],

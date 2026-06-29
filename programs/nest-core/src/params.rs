@@ -32,3 +32,14 @@ pub struct AddCollateralParams {
     pub protocol_debt_cap: u128,
     pub deposit_cap_raw: u128,
 }
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SignedPricePayload {
+    pub magic: [u8; 8],
+    pub version: u8,
+    pub feed_id: [u8; 32],
+    pub price_e8: u64,
+    pub confidence_e8: u64,
+    pub publish_time: i64,
+    pub expires_at: i64,
+}

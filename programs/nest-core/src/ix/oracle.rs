@@ -26,29 +26,68 @@ pub fn refresh_lazer_oracle(
     let verified = verified.get();
     let xstock_usd = read_lazer_price(&verified.payload, &ctx.accounts.collateral_config)?;
     let clock = Clock::get()?;
-    domain::safe_raw_token_price_e8(domain::PricingInputs {
-        xstock_usd: to_domain_price(xstock_usd),
-        underlying_usd: to_domain_price(inactive_oracle_price(
-            ctx.accounts.collateral_config.underlying_usd_feed_id,
-        )),
-        redemption_rate: to_domain_price(inactive_oracle_price(
-            ctx.accounts.collateral_config.redemption_rate_feed_id,
-        )),
-        now: clock.unix_timestamp,
-        xstock_policy: policy(
-            ctx.accounts.collateral_config.xstock_usd_feed_id,
-            &ctx.accounts.collateral_config,
-        )?,
-        underlying_policy: policy(
-            ctx.accounts.collateral_config.underlying_usd_feed_id,
-            &ctx.accounts.collateral_config,
-        )?,
-        redemption_policy: policy(
-            ctx.accounts.collateral_config.redemption_rate_feed_id,
-            &ctx.accounts.collateral_config,
-        )?,
-    })
-    .map_err(map_core_error)?;
+    validate_xstock_oracle_price(
+        &ctx.accounts.collateral_config,
+        xstock_usd,
+        clock.unix_timestamp,
+    )?;
+
+    let oracle = &mut ctx.accounts.oracle;
+    oracle.protocol = ctx.accounts.protocol.key();
+    oracle.collateral_config = ctx.accounts.collateral_config.key();
+    oracle.xstock_usd = xstock_usd;
+    oracle.underlying_usd =
+        inactive_oracle_price(ctx.accounts.collateral_config.underlying_usd_feed_id);
+    oracle.redemption_rate =
+        inactive_oracle_price(ctx.accounts.collateral_config.redemption_rate_feed_id);
+    oracle.market_state = MarketStateAccount::Regular;
+    oracle.calendar_valid_until_ts = 0;
+    oracle.bump = ctx.bumps.oracle;
+    Ok(())
+}
+
+pub fn refresh_signed_oracle(
+    ctx: Context<RefreshSignedOracle>,
+    payload: SignedPricePayload,
+    ed25519_instruction_index: u16,
+) -> Result<()> {
+    let clock = Clock::get()?;
+    let signed_message = signed_price_message(&payload)?;
+    verify_ed25519_instruction(
+        &ctx.accounts.instructions_sysvar,
+        ed25519_instruction_index,
+        &ctx.accounts.nest_price_signer.signer,
+        &signed_message,
+    )?;
+
+    require!(
+        payload.magic == SIGNED_PRICE_MAGIC && payload.version == SIGNED_PRICE_VERSION,
+        CoreError::InvalidParameter
+    );
+    validate_signed_feed_config(&ctx.accounts.collateral_config.xstock_usd_feed_id)?;
+    require!(
+        payload.feed_id == ctx.accounts.collateral_config.xstock_usd_feed_id,
+        CoreError::OracleError
+    );
+    require!(
+        payload.price_e8 > 0
+            && payload.expires_at >= payload.publish_time
+            && payload.expires_at >= clock.unix_timestamp,
+        CoreError::OracleError
+    );
+
+    let xstock_usd = OraclePriceAccount {
+        feed_id: payload.feed_id,
+        price_e8: payload.price_e8,
+        confidence_e8: payload.confidence_e8,
+        publish_time: payload.publish_time,
+    };
+
+    validate_xstock_oracle_price(
+        &ctx.accounts.collateral_config,
+        xstock_usd,
+        clock.unix_timestamp,
+    )?;
 
     let oracle = &mut ctx.accounts.oracle;
     oracle.protocol = ctx.accounts.protocol.key();

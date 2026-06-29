@@ -47,11 +47,9 @@ fn oracle_prices_raw_xstock_conservatively() {
         underlying_usd: price(feed(2), 110 * PRICE_SCALE as u64, PRICE_SCALE as u64, now),
         redemption_rate: price(feed(3), PRICE_SCALE as u64, 0, now),
         now,
-        market_state: MarketState::Closed,
         xstock_policy: policy(feed(1)),
         underlying_policy: policy(feed(2)),
         redemption_policy: policy(feed(3)),
-        closed_market_haircut_bps: 9_500,
     };
 
     let safe = safe_raw_token_price_e8(inputs).unwrap();
@@ -72,11 +70,9 @@ fn oracle_prices_from_xstock_usd() {
         underlying_usd: price(feed(2), 100 * PRICE_SCALE as u64, 0, now),
         redemption_rate: price(feed(3), 125_000_000, 0, now),
         now,
-        market_state: MarketState::Regular,
         xstock_policy: policy(feed(1)),
         underlying_policy: policy(feed(2)),
         redemption_policy: policy(feed(3)),
-        closed_market_haircut_bps: 9_500,
     };
 
     let safe = safe_raw_token_price_e8(inputs).unwrap();
@@ -84,6 +80,42 @@ fn oracle_prices_from_xstock_usd() {
 
     let value = collateral_value_usd(2 * 100_000_000, 8, safe).unwrap();
     assert_eq!(value, 260_000_000);
+}
+
+#[test]
+fn collateral_value_round_trip_is_conservative_across_decimals() {
+    let prices_e8 = [
+        1,               // Smallest positive e8 price.
+        PRICE_SCALE / 3, // Repeating conversion into 6-decimal USD.
+        PRICE_SCALE,
+        12_345_678_901,
+        250 * PRICE_SCALE,
+    ];
+    let amounts = [1, 7, 999, 1_000_000, 123_456_789, 9_876_543_210];
+
+    for decimals in [1_u8, 2, 6, 8, 9, 18] {
+        for price_e8 in prices_e8 {
+            for raw_amount in amounts {
+                let usd_value = collateral_value_usd(raw_amount, decimals, price_e8).unwrap();
+                if usd_value == 0 {
+                    continue;
+                }
+
+                let required_raw =
+                    collateral_raw_for_usd_value(usd_value, decimals, price_e8).unwrap();
+                let required_value =
+                    collateral_value_usd(required_raw, decimals, price_e8).unwrap();
+                assert!(required_value >= usd_value);
+                assert!(required_raw <= raw_amount);
+
+                if required_raw > 0 {
+                    let one_less_value =
+                        collateral_value_usd(required_raw - 1, decimals, price_e8).unwrap();
+                    assert!(one_less_value < usd_value);
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -97,6 +129,18 @@ fn oracle_rejects_wrong_feed_stale_and_wide_confidence() {
 
     p.feed_id = feed(1);
     p.publish_time = now - 31;
+    assert_eq!(
+        lower_confidence_bound(p, policy(feed(1)), now),
+        Err(NestError::OracleStale)
+    );
+
+    p.publish_time = now + 1;
+    assert_eq!(
+        lower_confidence_bound(p, policy(feed(1)), now),
+        Ok(PRICE_SCALE)
+    );
+
+    p.publish_time = now + 61;
     assert_eq!(
         lower_confidence_bound(p, policy(feed(1)), now),
         Err(NestError::OracleStale)
@@ -169,6 +213,51 @@ fn borrow_repay_realizes_fees_before_principal() {
 }
 
 #[test]
+fn repay_grid_preserves_debt_and_fee_accounting() {
+    for principal in [1_u128, 1_000_000, 50_000_000, 1_000_000_000] {
+        for accrued_fee in [0_u128, 1, 25_000, principal / 7 + 1] {
+            for payment in [
+                1_u128,
+                accrued_fee,
+                accrued_fee + 1,
+                principal + accrued_fee + 99,
+            ] {
+                if payment == 0 {
+                    continue;
+                }
+                let mut vault = Vault {
+                    collateral_raw: 1_000_000,
+                    principal_debt: principal,
+                    accrued_fee,
+                    last_accrual_ts: 0,
+                };
+                let mut protocol = ProtocolAccounting::new();
+                protocol.total_debt = vault.total_debt().unwrap();
+                protocol.total_uncollected_fees = accrued_fee;
+
+                let debt_before = vault.total_debt().unwrap();
+                let insurance_before = protocol.insurance_fund_nusd;
+                let staker_before = protocol.realized_revenue_for_stakers;
+                let outcome = repay(&mut vault, &mut protocol, payment).unwrap();
+                let paid = outcome.fee_paid + outcome.principal_paid;
+
+                assert!(outcome.fee_paid <= accrued_fee);
+                assert!(outcome.principal_paid <= principal);
+                assert_eq!(outcome.overpayment, payment - paid);
+                assert_eq!(vault.total_debt().unwrap(), debt_before - paid);
+                assert_eq!(protocol.total_debt, vault.total_debt().unwrap());
+                assert_eq!(protocol.total_uncollected_fees, vault.accrued_fee);
+                assert_eq!(
+                    (protocol.insurance_fund_nusd - insurance_before)
+                        + (protocol.realized_revenue_for_stakers - staker_before),
+                    outcome.fee_paid
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn stability_fee_accrual_does_not_round_up_tiny_intervals() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault {
@@ -202,6 +291,44 @@ fn stability_fee_accrual_does_not_round_up_tiny_intervals() {
 }
 
 #[test]
+fn stability_fee_accrual_handles_stale_future_and_overflow_time_bounds() {
+    let mut protocol = ProtocolAccounting::new();
+    let mut vault = Vault {
+        collateral_raw: 100,
+        principal_debt: 100_000_000,
+        accrued_fee: 123,
+        last_accrual_ts: 100,
+    };
+    protocol.total_debt = vault.total_debt().unwrap();
+    protocol.total_uncollected_fees = vault.accrued_fee;
+
+    let unchanged_vault = vault;
+    let unchanged_protocol = protocol;
+    let stale =
+        accrue_stability_fee(&mut vault, &mut protocol, DEFAULT_STABILITY_FEE_BPS, 100).unwrap();
+    assert_eq!(stale, 0);
+    assert_eq!(vault, unchanged_vault);
+    assert_eq!(protocol, unchanged_protocol);
+
+    let future_last =
+        accrue_stability_fee(&mut vault, &mut protocol, DEFAULT_STABILITY_FEE_BPS, 99).unwrap();
+    assert_eq!(future_last, 0);
+    assert_eq!(vault, unchanged_vault);
+    assert_eq!(protocol, unchanged_protocol);
+
+    vault.last_accrual_ts = i64::MIN;
+    assert_eq!(
+        accrue_stability_fee(
+            &mut vault,
+            &mut protocol,
+            DEFAULT_STABILITY_FEE_BPS,
+            i64::MAX
+        ),
+        Err(NestError::MathOverflow)
+    );
+}
+
+#[test]
 fn borrow_enforces_ltv_and_caps() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault::default();
@@ -219,6 +346,68 @@ fn borrow_enforces_ltv_and_caps() {
         borrow(&mut vault, &mut protocol, 100_000_000, params, 1),
         Err(NestError::InsufficientCollateral)
     );
+}
+
+#[test]
+fn borrow_grid_never_exceeds_ltv_or_debt_caps() {
+    for collateral_value in [1_u128, 999_999, 100_000_000, 9_876_543_210] {
+        for borrow_ltv_bps in [1_u16, 2_500, 4_500, 7_500, 9_998] {
+            let borrow_limit =
+                mul_div_down(collateral_value, borrow_ltv_bps as u128, BPS_DENOMINATOR).unwrap();
+            for existing_debt in [0_u128, borrow_limit / 2, borrow_limit] {
+                let vault = Vault {
+                    collateral_raw: 1_000_000,
+                    principal_debt: existing_debt,
+                    accrued_fee: 0,
+                    last_accrual_ts: 0,
+                };
+                let mut protocol = ProtocolAccounting::new();
+                protocol.total_debt = existing_debt;
+                let params = CollateralParams {
+                    borrow_ltv_bps,
+                    liquidation_threshold_bps: borrow_ltv_bps + 1,
+                    liquidation_penalty_bps: 800,
+                    close_factor_bps: 5_000,
+                    full_liquidation_threshold_bps: FULL_LIQUIDATION_HEALTH_FACTOR_BPS,
+                    per_vault_debt_cap: borrow_limit,
+                    protocol_debt_cap: borrow_limit,
+                    collateral_debt_cap: borrow_limit,
+                    collateral_debt_outstanding: existing_debt,
+                    deposit_cap_raw: u128::MAX,
+                    deposits_paused: false,
+                    borrows_paused: false,
+                    withdraws_paused: false,
+                };
+
+                let remaining_capacity = borrow_limit.saturating_sub(existing_debt);
+                if remaining_capacity > 0 {
+                    let mut allowed_vault = vault;
+                    let mut allowed_protocol = protocol;
+                    borrow(
+                        &mut allowed_vault,
+                        &mut allowed_protocol,
+                        collateral_value,
+                        params,
+                        remaining_capacity,
+                    )
+                    .unwrap();
+                    assert_eq!(allowed_vault.total_debt().unwrap(), borrow_limit);
+                    assert_eq!(allowed_protocol.total_debt, borrow_limit);
+                }
+
+                assert_eq!(
+                    can_borrow(
+                        collateral_value,
+                        vault,
+                        params,
+                        protocol,
+                        remaining_capacity + 1
+                    ),
+                    Err(NestError::InsufficientCollateral)
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -812,6 +1001,86 @@ fn full_liquidation_uses_insurance_before_recording_bad_debt() {
 }
 
 #[test]
+fn liquidation_grid_preserves_collateral_and_debt_accounting() {
+    let params = CollateralParams {
+        borrow_ltv_bps: 4_500,
+        liquidation_threshold_bps: 5_500,
+        liquidation_penalty_bps: 800,
+        close_factor_bps: 5_000,
+        protocol_debt_cap: 10_000_000_000,
+        collateral_debt_cap: 10_000_000_000,
+        ..CollateralParams::default()
+    };
+
+    for collateral_raw in [500_000_u128, 1_000_000, 5_000_000, 10_000_000] {
+        for principal in [50_000_000_u128, 100_000_000, 250_000_000] {
+            for accrued_fee in [0_u128, 250_000, 1_000_000] {
+                for price_e8 in [5 * PRICE_SCALE, 12 * PRICE_SCALE, 80 * PRICE_SCALE] {
+                    let collateral_value =
+                        collateral_value_usd(collateral_raw, 6, price_e8).unwrap();
+                    if health_factor_bps(
+                        collateral_value,
+                        principal + accrued_fee,
+                        params.liquidation_threshold_bps,
+                    )
+                    .unwrap()
+                        >= BPS_DENOMINATOR
+                    {
+                        continue;
+                    }
+
+                    let mut vault = Vault {
+                        collateral_raw,
+                        principal_debt: principal,
+                        accrued_fee,
+                        last_accrual_ts: 0,
+                    };
+                    let mut protocol = ProtocolAccounting::new();
+                    protocol.total_debt = vault.total_debt().unwrap();
+                    protocol.total_uncollected_fees = accrued_fee;
+                    protocol.insurance_fund_nusd = principal / 10;
+
+                    let debt_before = vault.total_debt().unwrap();
+                    let collateral_before = vault.collateral_raw;
+                    let insurance_before = protocol.insurance_fund_nusd;
+                    let requested_repay = debt_before / 2 + 1;
+                    let result = liquidate(
+                        &mut vault,
+                        &mut protocol,
+                        collateral_value,
+                        price_e8,
+                        6,
+                        params,
+                        requested_repay,
+                    );
+
+                    let Ok(out) = result else {
+                        continue;
+                    };
+                    let seized = out.keeper_collateral_raw + out.insurance_collateral_raw;
+                    let paid_or_written_off = out.fee_paid
+                        + out.principal_paid
+                        + out.insurance_nusd_burned
+                        + out.bad_debt;
+
+                    assert!(seized <= collateral_before);
+                    assert_eq!(vault.collateral_raw, collateral_before - seized);
+                    assert_eq!(protocol.total_debt, vault.total_debt().unwrap());
+                    assert_eq!(protocol.total_uncollected_fees, vault.accrued_fee);
+                    assert_eq!(
+                        debt_before - vault.total_debt().unwrap(),
+                        paid_or_written_off
+                    );
+                    assert!(out.insurance_nusd_burned <= insurance_before);
+                    assert_eq!(protocol.bad_debt_nusd, out.bad_debt);
+                    assert!(out.staker_penalty_nusd <= out.repaid_debt * 800 / BPS_DENOMINATOR + 1);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn bad_debt_can_be_recapitalized_after_surplus_arrives() {
     let mut protocol = ProtocolAccounting::new();
     protocol.bad_debt_nusd = 160_000_000;
@@ -852,6 +1121,42 @@ fn staking_vests_revenue_and_enforces_cooldown() {
         .complete_unstake(pending, 20 + DEFAULT_COOLDOWN_SECONDS)
         .unwrap();
     assert!(assets >= 10_000_000);
+}
+
+#[test]
+fn staking_grid_never_over_redeems_accounted_assets() {
+    for first_stake in [1_000_000_u128, 100_000_000, 1_000_000_000] {
+        for second_stake in [1_u128, first_stake / 3 + 1, first_stake] {
+            for revenue in [0_u128, 1, first_stake / 10] {
+                for loss in [0_u128, 1, first_stake / 20] {
+                    let mut pool = StakingPool::default();
+                    let first_shares = pool.stake(first_stake, 0).unwrap();
+                    let second_shares = pool.stake(second_stake, 1).unwrap();
+                    assert!(second_shares <= second_stake);
+
+                    if revenue > 0 {
+                        pool.harvest(revenue, 2).unwrap();
+                        pool.sync_vesting(2 + DEFAULT_REVENUE_VESTING_SECONDS)
+                            .unwrap();
+                    }
+                    if loss > 0 && loss < pool.staking_vault_nusd {
+                        pool.realize_loss(loss).unwrap();
+                    }
+
+                    let accounted_before = pool.accounted_assets().unwrap();
+                    let pending = pool.request_unstake(first_shares, 3).unwrap();
+                    let assets = pool
+                        .complete_unstake(pending, 3 + DEFAULT_COOLDOWN_SECONDS)
+                        .unwrap();
+
+                    assert!(assets <= accounted_before);
+                    assert_eq!(pool.total_shares, second_shares);
+                    assert_eq!(pool.accounted_assets().unwrap(), accounted_before - assets);
+                    assert_staking_pool_invariants(pool, second_shares, 0);
+                }
+            }
+        }
+    }
 }
 
 #[test]
@@ -1031,15 +1336,21 @@ fn mixed_staking_operations_preserve_share_and_asset_invariants() {
     pool.harvest(30_000_000, first_vesting_end_ts).unwrap();
     assert_staking_pool_invariants(pool, active_shares, pending_shares);
 
+    assert_eq!(
+        pool.complete_unstake(pending, request_ts + DEFAULT_COOLDOWN_SECONDS),
+        Err(NestError::CooldownActive)
+    );
+
+    let second_vesting_end_ts = first_vesting_end_ts + DEFAULT_REVENUE_VESTING_SECONDS;
     let assets = pool
-        .complete_unstake(pending, request_ts + DEFAULT_COOLDOWN_SECONDS)
+        .complete_unstake(pending, second_vesting_end_ts)
         .unwrap();
-    assert_eq!(assets, 36_000_010);
+    assert_eq!(assets, 39_085_714);
     pending_shares -= pending.shares;
     assert_staking_pool_invariants(pool, active_shares, pending_shares);
     assert_eq!(pool.total_shares, 115_833_333);
-    assert_eq!(pool.staking_vault_nusd, 153_999_990);
-    assert_eq!(pool.unvested_revenue, 14_999_951);
+    assert_eq!(pool.staking_vault_nusd, 150_914_286);
+    assert_eq!(pool.unvested_revenue, 0);
 }
 
 #[test]

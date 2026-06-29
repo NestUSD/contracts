@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::program_option::COption;
 use anchor_lang::solana_program::{
+    ed25519_program,
     instruction::{AccountMeta, Instruction},
     program::invoke_signed,
     sysvar,
@@ -81,6 +82,18 @@ pub mod nest_core {
             ed25519_instruction_index,
             signature_index,
         )
+    }
+
+    pub fn set_nest_price_signer(ctx: Context<SetNestPriceSigner>, signer: Pubkey) -> Result<()> {
+        ix::admin::set_nest_price_signer(ctx, signer)
+    }
+
+    pub fn refresh_signed_oracle(
+        ctx: Context<RefreshSignedOracle>,
+        payload: SignedPricePayload,
+        ed25519_instruction_index: u16,
+    ) -> Result<()> {
+        ix::oracle::refresh_signed_oracle(ctx, payload, ed25519_instruction_index)
     }
 
     pub fn deposit(ctx: Context<Deposit>, amount: u64) -> Result<()> {

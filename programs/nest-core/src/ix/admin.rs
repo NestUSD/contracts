@@ -61,6 +61,16 @@ pub fn set_protocol_authority(ctx: Context<MutateProtocol>, authority: Pubkey) -
     Ok(())
 }
 
+pub fn set_nest_price_signer(ctx: Context<SetNestPriceSigner>, signer: Pubkey) -> Result<()> {
+    require_keys_neq!(signer, Pubkey::default(), CoreError::InvalidParameter);
+    let config = &mut ctx.accounts.nest_price_signer;
+    config.protocol = ctx.accounts.protocol.key();
+    config.authority = ctx.accounts.authority.key();
+    config.signer = signer;
+    config.bump = ctx.bumps.nest_price_signer;
+    Ok(())
+}
+
 pub fn set_staker_yield_params(
     ctx: Context<SetStakerYieldParams>,
     staker_target_apr_bps: u64,

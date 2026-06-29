@@ -6,6 +6,23 @@ pub struct MutateProtocol<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SetNestPriceSigner<'info> {
+    #[account(seeds = [b"protocol"], bump = protocol.bump, has_one = authority)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + NestPriceSignerConfig::INIT_SPACE,
+        seeds = [b"nest_price_signer", protocol.key().as_ref()],
+        bump
+    )]
+    pub nest_price_signer: Box<Account<'info, NestPriceSignerConfig>>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct SetStakerYieldParams<'info> {
     #[account(mut, seeds = [b"protocol"], bump = protocol.bump, has_one = authority)]
     pub protocol: Box<Account<'info, Protocol>>,
