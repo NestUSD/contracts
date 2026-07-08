@@ -204,6 +204,8 @@ pub fn realize_psm_kamino_yield(
             usdc_received,
             staking_assets,
             Clock::get()?.unix_timestamp,
+            true,
+            true,
         )?;
     let nusd_supply_before = ctx.accounts.nusd_mint.supply;
 

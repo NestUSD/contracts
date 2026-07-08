@@ -312,6 +312,201 @@
     }
 
     #[test]
+    fn liquidation_debt_settlement_bypasses_voluntary_psm_cap() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.pending_liquidation_principal = 250;
+        protocol.pending_liquidation_fees = 17;
+
+        ix::liquidation::two_step::record_liquidation_debt_settlement(&mut protocol, 250, 17)
+            .unwrap();
+
+        assert_eq!(protocol.pending_liquidation_principal, 0);
+        assert_eq!(protocol.pending_liquidation_fees, 0);
+        assert_eq!(protocol.psm_usdc_liabilities, 1_250);
+        assert_eq!(protocol.psm_nusd_supply, 1_250);
+        assert_eq!(protocol.psm_idle_usdc, 1_250);
+        assert_eq!(protocol.psm_cap, 1_000);
+    }
+
+    #[test]
+    fn liquidation_surplus_accounting_bypasses_voluntary_psm_cap_only_when_requested() {
+        let mut capped_protocol = protocol_for_psm_outflow_test();
+        assert!(apply_realized_psm_yield_accounting(
+            &mut capped_protocol,
+            1_250,
+            250,
+            0,
+            10,
+            true,
+            true,
+        )
+        .is_err());
+
+        let mut liquidation_protocol = protocol_for_psm_outflow_test();
+        let (insurance_delta, staker_delta, protocol_delta, minted_nusd) =
+            apply_realized_psm_yield_accounting(
+                &mut liquidation_protocol,
+                1_250,
+                250,
+                0,
+                10,
+                false,
+                false,
+            )
+            .unwrap();
+
+        assert_eq!(insurance_delta, 0);
+        assert_eq!(staker_delta, 250);
+        assert_eq!(protocol_delta, 0);
+        assert_eq!(minted_nusd, 250);
+        assert_eq!(liquidation_protocol.psm_usdc_liabilities, 1_250);
+        assert_eq!(liquidation_protocol.psm_nusd_supply, 1_250);
+        assert_eq!(liquidation_protocol.psm_idle_usdc, 1_250);
+        assert_eq!(liquidation_protocol.realized_revenue_for_stakers, 250);
+    }
+
+    #[test]
+    fn liquidation_bad_debt_recovery_bypasses_pause_and_psm_cap() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.paused = true;
+        protocol.bad_debt_nusd = 300;
+
+        ix::liquidation::two_step::record_liquidation_bad_debt_recovery(
+            &mut protocol,
+            1_250,
+            250,
+        )
+        .unwrap();
+
+        assert_eq!(protocol.bad_debt_nusd, 50);
+        assert_eq!(protocol.psm_usdc_liabilities, 1_250);
+        assert_eq!(protocol.psm_nusd_supply, 1_250);
+        assert_eq!(protocol.psm_idle_usdc, 1_250);
+        assert_eq!(protocol.psm_cap, 1_000);
+        assert!(protocol.paused);
+    }
+
+    #[test]
+    fn liquidation_borrower_surplus_mints_backed_nusd_without_psm_cap() {
+        let mut protocol = protocol_for_psm_outflow_test();
+
+        ix::liquidation::two_step::record_liquidation_borrower_surplus(
+            &mut protocol,
+            1_250,
+            250,
+        )
+        .unwrap();
+
+        assert_eq!(protocol.psm_usdc_liabilities, 1_250);
+        assert_eq!(protocol.psm_nusd_supply, 1_250);
+        assert_eq!(protocol.psm_idle_usdc, 1_250);
+        assert_eq!(protocol.psm_cap, 1_000);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_uses_debt_fee_and_penalty_as_settlement_target() {
+        let (min_settlement, target_settlement) =
+            ix::liquidation::two_step::full_liquidation_settlement_terms(
+                9_000_000,
+                550_000_000,
+                0,
+                6,
+                100 * domain::PRICE_SCALE,
+                800,
+            )
+            .unwrap();
+
+        assert_eq!(min_settlement, 594_000_000);
+        assert_eq!(target_settlement, 594_000_000);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_accepts_lower_floor_but_keeps_target_claim() {
+        let (min_settlement, target_settlement) =
+            ix::liquidation::two_step::full_liquidation_settlement_terms(
+                1_000_000,
+                200_000_000,
+                0,
+                6,
+                100 * domain::PRICE_SCALE,
+                800,
+            )
+            .unwrap();
+
+        assert_eq!(min_settlement, 100_000_000);
+        assert_eq!(target_settlement, 216_000_000);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_floor_never_exceeds_target_from_rounding() {
+        let (min_settlement, target_settlement) =
+            ix::liquidation::two_step::full_liquidation_settlement_terms(
+                2,
+                2_000_000,
+                0,
+                0,
+                150_000_000,
+                0,
+            )
+            .unwrap();
+
+        assert_eq!(min_settlement, 2_000_000);
+        assert_eq!(target_settlement, 2_000_000);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_only_returns_surplus_above_target() {
+        let principal_debt = 95_000_000_u128;
+        let target_settlement = 108_000_000_u128;
+        let sale_proceeds = 110_000_000_u128;
+
+        let protocol_settlement = core::cmp::min(sale_proceeds, target_settlement);
+        let revenue_amount = protocol_settlement.checked_sub(principal_debt).unwrap();
+        let borrower_surplus = sale_proceeds.checked_sub(protocol_settlement).unwrap();
+
+        assert_eq!(protocol_settlement, 108_000_000);
+        assert_eq!(revenue_amount, 13_000_000);
+        assert_eq!(borrower_surplus, 2_000_000);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_keeps_partial_recovery_below_target() {
+        let principal_debt = 95_000_000_u128;
+        let target_settlement = 108_000_000_u128;
+        let sale_proceeds = 104_000_000_u128;
+
+        let protocol_settlement = core::cmp::min(sale_proceeds, target_settlement);
+        let revenue_amount = protocol_settlement.checked_sub(principal_debt).unwrap();
+        let borrower_surplus = sale_proceeds.checked_sub(protocol_settlement).unwrap();
+
+        assert_eq!(protocol_settlement, 104_000_000);
+        assert_eq!(revenue_amount, 9_000_000);
+        assert_eq!(borrower_surplus, 0);
+    }
+
+    #[test]
+    fn two_step_full_liquidation_settlement_terms_reject_empty_collateral() {
+        assert!(ix::liquidation::two_step::full_liquidation_settlement_terms(
+            0,
+            9_000_000,
+            550_000_000,
+            6,
+            100 * domain::PRICE_SCALE,
+            800,
+        )
+        .is_err());
+        assert!(ix::liquidation::two_step::full_liquidation_settlement_terms(
+            1_000_000,
+            0,
+            0,
+            6,
+            100 * domain::PRICE_SCALE,
+            800,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn staking_state_reader_offsets_match_serialized_layout() {
         #[derive(AnchorSerialize)]
         struct StakingStateLayout {

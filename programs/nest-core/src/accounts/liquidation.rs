@@ -96,6 +96,8 @@ pub struct SettleLiquidationProceeds<'info> {
         bump = liquidation_receipt.bump
     )]
     pub liquidation_receipt: Box<Account<'info, LiquidationReceipt>>,
+    #[account(address = liquidation_receipt.vault)]
+    pub vault: Box<Account<'info, Vault>>,
     #[account(address = protocol.usdc_mint)]
     pub usdc_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut, address = protocol.nusd_mint)]
@@ -104,6 +106,8 @@ pub struct SettleLiquidationProceeds<'info> {
     pub liquidator_usdc_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, address = protocol.psm_usdc_vault, token::mint = usdc_mint, token::authority = protocol, token::token_program = usdc_token_program)]
     pub psm_usdc_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(mut, token::mint = nusd_mint, token::authority = vault.owner, token::token_program = nusd_token_program)]
+    pub borrower_nusd_account: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(mut, address = protocol.insurance_nusd_vault, token::mint = nusd_mint, token::authority = protocol, token::token_program = nusd_token_program)]
     pub insurance_nusd_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(

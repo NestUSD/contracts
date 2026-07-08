@@ -4,12 +4,16 @@ fn apply_realized_psm_yield_accounting(
     amount: u64,
     staking_assets: u128,
     now: i64,
+    enforce_psm_cap: bool,
+    enforce_protocol_open: bool,
 ) -> Result<(u64, u64, u64, u64)> {
     // A yield route is allowed only when the canonical PSM vault already holds
     // more USDC than recorded idle liquidity. The newly minted nUSD is backed
     // by that real surplus and split through the same insurance/staker policy as fees.
     require!(amount > 0, CoreError::InvalidParameter);
-    require!(!protocol.paused, CoreError::Paused);
+    if enforce_protocol_open {
+        require!(!protocol.paused, CoreError::Paused);
+    }
     require!(protocol.bad_debt_nusd == 0, CoreError::BadDebtOutstanding);
 
     let amount_u128 = amount as u128;
@@ -26,10 +30,12 @@ fn apply_realized_psm_yield_accounting(
         .psm_usdc_liabilities
         .checked_add(amount_u128)
         .ok_or(error!(CoreError::MathOverflow))?;
-    require!(
-        new_liabilities <= protocol.psm_cap,
-        CoreError::PsmCapExceeded
-    );
+    if enforce_psm_cap {
+        require!(
+            new_liabilities <= protocol.psm_cap,
+            CoreError::PsmCapExceeded
+        );
+    }
 
     let insurance_before = protocol.insurance_fund_nusd;
     let staker_before = protocol.realized_revenue_for_stakers;

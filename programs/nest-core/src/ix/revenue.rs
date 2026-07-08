@@ -15,6 +15,8 @@ pub fn realize_psm_yield(ctx: Context<RealizePsmYield>, amount: u64) -> Result<(
             amount,
             staking_assets,
             Clock::get()?.unix_timestamp,
+            true,
+            true,
         )?;
     let nusd_supply_before = ctx.accounts.nusd_mint.supply;
 
