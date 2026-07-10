@@ -63,9 +63,18 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
     require!(amount > 0, StakeError::InvalidParameter);
     require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
     let was_empty = ctx.accounts.staking_state.total_shares == 0;
+    let pending_revenue = if was_empty {
+        0
+    } else {
+        (ctx.accounts.revenue_nusd_vault.amount as u128)
+            .checked_sub(ctx.accounts.staking_state.revenue_baseline_nusd)
+            .ok_or(error!(StakeError::InsufficientAssets))?
+    };
     let mut pool = domain_pool(&ctx.accounts.staking_state);
     let now = Clock::get()?.unix_timestamp;
-    let minted_shares = pool.stake(amount as u128, now).map_err(map_stake_error)?;
+    let minted_shares = pool
+        .stake(amount as u128, pending_revenue, now)
+        .map_err(map_stake_error)?;
     if let Some(capacity) = staking_capacity_from_protocol(
         &ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.nusd_mint,

@@ -1101,7 +1101,7 @@ fn bad_debt_can_be_recapitalized_after_surplus_arrives() {
 #[test]
 fn staking_vests_revenue_and_enforces_cooldown() {
     let mut pool = StakingPool::default();
-    let shares = pool.stake(100_000_000, 0).unwrap();
+    let shares = pool.stake(100_000_000, 0, 0).unwrap();
     assert_eq!(shares, 100_000_000);
 
     pool.harvest(7_000_000, 10).unwrap();
@@ -1130,8 +1130,8 @@ fn staking_grid_never_over_redeems_accounted_assets() {
             for revenue in [0_u128, 1, first_stake / 10] {
                 for loss in [0_u128, 1, first_stake / 20] {
                     let mut pool = StakingPool::default();
-                    let first_shares = pool.stake(first_stake, 0).unwrap();
-                    let second_shares = pool.stake(second_stake, 1).unwrap();
+                    let first_shares = pool.stake(first_stake, 0, 0).unwrap();
+                    let second_shares = pool.stake(second_stake, 0, 1).unwrap();
                     assert!(second_shares <= second_stake);
 
                     if revenue > 0 {
@@ -1162,7 +1162,7 @@ fn staking_grid_never_over_redeems_accounted_assets() {
 #[test]
 fn staking_complete_unstake_updates_pool_at_exact_cooldown_boundary() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
 
     let pending = pool.request_unstake(25_000_000, 10).unwrap();
     assert_eq!(pool.total_shares, 100_000_000);
@@ -1190,14 +1190,14 @@ fn staking_rejects_zero_harvest() {
         pool.harvest(1_000_000, 10),
         Err(NestError::InvalidParameter)
     );
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     assert_eq!(pool.harvest(0, 10), Err(NestError::InvalidParameter));
 }
 
 #[test]
 fn staking_losses_socialize_to_pending_shares() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     let pending = pool.request_unstake(50_000_000, 1).unwrap();
     assert_eq!(pool.total_shares, 100_000_000);
     pool.realize_loss(20_000_000).unwrap();
@@ -1210,7 +1210,7 @@ fn staking_losses_socialize_to_pending_shares() {
 #[test]
 fn staking_pending_shares_remain_in_revenue_denominator() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     let pending = pool.request_unstake(50_000_000, 1).unwrap();
     assert_eq!(pool.total_shares, 100_000_000);
 
@@ -1227,7 +1227,7 @@ fn staking_pending_shares_remain_in_revenue_denominator() {
 #[test]
 fn staking_rejects_harvest_while_previous_revenue_is_vesting() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     pool.harvest(10_000_000, 10).unwrap();
 
     assert_eq!(
@@ -1243,14 +1243,14 @@ fn staking_rejects_harvest_while_previous_revenue_is_vesting() {
 #[test]
 fn staking_new_stakers_do_not_capture_unvested_revenue() {
     let mut pool = StakingPool::default();
-    let first_shares = pool.stake(100_000_000, 0).unwrap();
+    let first_shares = pool.stake(100_000_000, 0, 0).unwrap();
     assert_eq!(first_shares, 100_000_000);
 
     pool.harvest(100_000_000, 10).unwrap();
     assert_eq!(pool.accounted_assets().unwrap(), 100_000_000);
-    assert_eq!(pool.stake_entry_assets().unwrap(), 200_000_000);
+    assert_eq!(pool.stake_entry_assets(0).unwrap(), 200_000_000);
 
-    let second_shares = pool.stake(100_000_000, 10).unwrap();
+    let second_shares = pool.stake(100_000_000, 0, 10).unwrap();
     assert_eq!(second_shares, 50_000_000);
     assert_eq!(pool.total_shares, 150_000_000);
 
@@ -1269,20 +1269,47 @@ fn staking_new_stakers_do_not_capture_unvested_revenue() {
 }
 
 #[test]
+fn staking_new_stakers_do_not_capture_unharvested_revenue() {
+    let mut pool = StakingPool::default();
+    let first_shares = pool.stake(100_000_000, 0, 0).unwrap();
+
+    let second_shares = pool.stake(100_000_000, 100_000_000, 10).unwrap();
+    assert_eq!(second_shares, 50_000_000);
+
+    pool.harvest(100_000_000, 10).unwrap();
+    pool.sync_vesting(10 + DEFAULT_REVENUE_VESTING_SECONDS)
+        .unwrap();
+
+    let accounted = pool.accounted_assets().unwrap();
+    assert_eq!(accounted, 300_000_000);
+    assert_eq!(
+        mul_div_down(first_shares, accounted, pool.total_shares).unwrap(),
+        200_000_000
+    );
+    assert_eq!(
+        mul_div_down(second_shares, accounted, pool.total_shares).unwrap(),
+        100_000_000
+    );
+}
+
+#[test]
 fn staking_rejects_new_stake_when_existing_shares_have_zero_assets() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     pool.realize_loss(100_000_000).unwrap();
 
     assert_eq!(pool.total_shares, 100_000_000);
     assert_eq!(pool.staking_vault_nusd, 0);
-    assert_eq!(pool.stake(100_000_000, 1), Err(NestError::InvalidParameter));
+    assert_eq!(
+        pool.stake(100_000_000, 0, 1),
+        Err(NestError::InvalidParameter)
+    );
 }
 
 #[test]
 fn final_pending_unstake_waits_for_unvested_revenue() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     let pending = pool.request_unstake(100_000_000, 1).unwrap();
 
     let late_harvest_ts = 1 + DEFAULT_COOLDOWN_SECONDS - 10;
@@ -1304,7 +1331,7 @@ fn final_pending_unstake_waits_for_unvested_revenue() {
 #[test]
 fn mixed_staking_operations_preserve_share_and_asset_invariants() {
     let mut pool = StakingPool::default();
-    let mut active_shares = pool.stake(100_000_000, 0).unwrap();
+    let mut active_shares = pool.stake(100_000_000, 0, 0).unwrap();
     let mut pending_shares = 0;
     assert_eq!(active_shares, 100_000_000);
     assert_staking_pool_invariants(pool, active_shares, pending_shares);
@@ -1318,7 +1345,7 @@ fn mixed_staking_operations_preserve_share_and_asset_invariants() {
     assert_eq!(pool.accounted_assets().unwrap(), 110_000_000);
     assert_staking_pool_invariants(pool, active_shares, pending_shares);
 
-    let second_stake_shares = pool.stake(55_000_000, half_vested_ts).unwrap();
+    let second_stake_shares = pool.stake(55_000_000, 0, half_vested_ts).unwrap();
     assert_eq!(second_stake_shares, 45_833_333);
     active_shares += second_stake_shares;
     assert_staking_pool_invariants(pool, active_shares, pending_shares);
@@ -1405,7 +1432,7 @@ fn staking_rejects_negative_timestamps() {
     let mut pool = StakingPool::default();
 
     assert_eq!(
-        pool.stake(100_000_000, -1),
+        pool.stake(100_000_000, 0, -1),
         Err(NestError::InvalidParameter)
     );
     assert_eq!(
@@ -1413,7 +1440,7 @@ fn staking_rejects_negative_timestamps() {
         Err(NestError::InvalidParameter)
     );
 
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
     assert_eq!(
         pool.request_unstake(1_000_000, -1),
         Err(NestError::InvalidParameter)
@@ -1433,7 +1460,7 @@ fn staking_rejects_negative_timestamps() {
 #[test]
 fn staking_rejects_cooldown_unlock_timestamp_overflow() {
     let mut pool = StakingPool::default();
-    pool.stake(100_000_000, 0).unwrap();
+    pool.stake(100_000_000, 0, 0).unwrap();
 
     assert_eq!(
         pool.complete_unstake(

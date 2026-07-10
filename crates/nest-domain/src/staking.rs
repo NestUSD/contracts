@@ -44,8 +44,11 @@ impl StakingPool {
         checked_sub(after_unvested, self.reserved_pending_claims)
     }
 
-    pub fn stake_entry_assets(&self) -> Result<u128> {
-        checked_sub(self.staking_vault_nusd, self.reserved_pending_claims)
+    pub fn stake_entry_assets(&self, pending_revenue: u128) -> Result<u128> {
+        checked_add(
+            checked_sub(self.staking_vault_nusd, self.reserved_pending_claims)?,
+            pending_revenue,
+        )
     }
 
     pub fn sync_vesting(&mut self, now: i64) -> Result<u128> {
@@ -72,12 +75,12 @@ impl StakingPool {
         Ok(vested)
     }
 
-    pub fn stake(&mut self, amount: u128, now: i64) -> Result<u128> {
+    pub fn stake(&mut self, amount: u128, pending_revenue: u128, now: i64) -> Result<u128> {
         if amount == 0 {
             return Err(NestError::InvalidParameter);
         }
         self.sync_vesting(now)?;
-        let entry_assets = self.stake_entry_assets()?;
+        let entry_assets = self.stake_entry_assets(pending_revenue)?;
         let shares = if self.total_shares == 0 {
             amount
         } else {
