@@ -205,11 +205,35 @@ fn borrow_repay_realizes_fees_before_principal() {
     let outcome = repay(&mut vault, &mut protocol, 2_000_000).unwrap();
     assert_eq!(outcome.fee_paid, 1_500_000);
     assert_eq!(outcome.principal_paid, 500_000);
+    assert_eq!(outcome.bad_debt_repaid, 0);
     assert_eq!(vault.accrued_fee, 0);
     assert_eq!(vault.principal_debt, 99_500_000);
     assert_eq!(protocol.total_uncollected_fees, 0);
     assert_eq!(protocol.insurance_fund_nusd, 300_000);
     assert_eq!(protocol.realized_revenue_for_stakers, 1_200_000);
+}
+
+#[test]
+fn repayment_burns_fees_against_bad_debt_before_routing_revenue() {
+    let mut protocol = ProtocolAccounting::new();
+    protocol.bad_debt_nusd = 2_000_000;
+    protocol.total_debt = 103_000_000;
+    protocol.total_uncollected_fees = 3_000_000;
+    let mut vault = Vault {
+        collateral_raw: 100,
+        principal_debt: 100_000_000,
+        accrued_fee: 3_000_000,
+        last_accrual_ts: 0,
+    };
+
+    let outcome = repay(&mut vault, &mut protocol, 4_000_000).unwrap();
+
+    assert_eq!(outcome.fee_paid, 3_000_000);
+    assert_eq!(outcome.principal_paid, 1_000_000);
+    assert_eq!(outcome.bad_debt_repaid, 2_000_000);
+    assert_eq!(protocol.bad_debt_nusd, 0);
+    assert_eq!(protocol.insurance_fund_nusd, 200_000);
+    assert_eq!(protocol.realized_revenue_for_stakers, 800_000);
 }
 
 #[test]
@@ -849,7 +873,8 @@ fn full_liquidation_records_bad_debt_when_repay_exactly_exhausts_collateral() {
     assert_eq!(vault.collateral_raw, 0);
     assert_eq!(vault.total_debt().unwrap(), 0);
     assert_eq!(out.bad_debt, 100_000_000);
-    assert_eq!(protocol.bad_debt_nusd, 100_000_000);
+    assert_eq!(out.bad_debt_repaid, 8_000_000);
+    assert_eq!(protocol.bad_debt_nusd, 92_000_000);
     assert_eq!(protocol.total_debt, 0);
 }
 
@@ -889,7 +914,9 @@ fn full_liquidation_cancels_fees_without_recording_them_as_bad_debt() {
     assert_eq!(out.fee_cancelled, 9_000_000);
     assert_eq!(out.insurance_nusd_burned, 50_000_000);
     assert_eq!(out.bad_debt, 50_000_000);
-    assert_eq!(protocol.bad_debt_nusd, 50_000_000);
+    assert_eq!(out.bad_debt_repaid, 1_080_000);
+    assert_eq!(protocol.bad_debt_nusd, 48_920_000);
+    assert_eq!(protocol.realized_revenue_for_stakers, 0);
     assert_eq!(protocol.total_uncollected_fees, 0);
     assert_eq!(protocol.total_debt, 0);
     assert_eq!(vault.total_debt().unwrap(), 0);
@@ -1049,7 +1076,8 @@ fn full_liquidation_closes_underwater_vault_and_tracks_bad_debt() {
     assert_eq!(vault.collateral_raw, 0);
     assert_eq!(vault.total_debt().unwrap(), 0);
     assert_eq!(out.bad_debt, 210_000_000);
-    assert_eq!(protocol.bad_debt_nusd, 210_000_000);
+    assert_eq!(out.bad_debt_repaid, 10_000_000);
+    assert_eq!(protocol.bad_debt_nusd, 200_000_000);
     assert_eq!(protocol.total_debt, 0);
 }
 
@@ -1085,8 +1113,9 @@ fn full_liquidation_uses_insurance_before_recording_bad_debt() {
 
     assert_eq!(out.insurance_nusd_burned, 50_000_000);
     assert_eq!(out.bad_debt, 160_000_000);
+    assert_eq!(out.bad_debt_repaid, 10_000_000);
     assert_eq!(protocol.insurance_fund_nusd, 0);
-    assert_eq!(protocol.bad_debt_nusd, 160_000_000);
+    assert_eq!(protocol.bad_debt_nusd, 150_000_000);
     assert_eq!(vault.total_debt().unwrap(), 0);
 }
 
@@ -1151,6 +1180,7 @@ fn liquidation_grid_preserves_collateral_and_debt_accounting() {
                     let paid_or_written_off = out.fee_paid
                         + out.principal_paid
                         + out.insurance_nusd_burned
+                        + out.fee_cancelled
                         + out.bad_debt;
 
                     assert!(seized <= collateral_before);
@@ -1162,7 +1192,10 @@ fn liquidation_grid_preserves_collateral_and_debt_accounting() {
                         paid_or_written_off
                     );
                     assert!(out.insurance_nusd_burned <= insurance_before);
-                    assert_eq!(protocol.bad_debt_nusd, out.bad_debt);
+                    assert_eq!(
+                        protocol.bad_debt_nusd,
+                        out.bad_debt.saturating_sub(out.bad_debt_repaid)
+                    );
                     assert!(out.staker_penalty_nusd <= out.repaid_debt * 800 / BPS_DENOMINATOR + 1);
                 }
             }

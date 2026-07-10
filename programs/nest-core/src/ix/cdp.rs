@@ -262,7 +262,14 @@ pub fn repay_nusd(ctx: Context<RepayNusd>, amount: u64) -> Result<()> {
         .checked_add(staker_delta)
         .and_then(|v| v.checked_add(protocol_delta))
         .ok_or(error!(CoreError::MathOverflow))?;
-    require!(routed_fee == out.fee_paid, CoreError::MathOverflow);
+    require!(
+        routed_fee
+            == out
+                .fee_paid
+                .checked_sub(out.bad_debt_repaid)
+                .ok_or(error!(CoreError::MathOverflow))?,
+        CoreError::MathOverflow
+    );
     let insurance_delta_u64 = u128_to_u64(insurance_delta)?;
     if insurance_delta_u64 > 0 {
         let insurance_vault_before = ctx.accounts.insurance_nusd_vault.amount;
@@ -323,14 +330,18 @@ pub fn repay_nusd(ctx: Context<RepayNusd>, amount: u64) -> Result<()> {
             protocol_delta_u64,
         )?;
     }
-    let principal_paid_u64 = u128_to_u64(out.principal_paid)?;
-    if principal_paid_u64 > 0 {
+    let burned_nusd_u64 = u128_to_u64(
+        out.principal_paid
+            .checked_add(out.bad_debt_repaid)
+            .ok_or(error!(CoreError::MathOverflow))?,
+    )?;
+    if burned_nusd_u64 > 0 {
         token_burn_checked(
             ctx.accounts.nusd_token_program.to_account_info(),
             ctx.accounts.nusd_mint.to_account_info(),
             ctx.accounts.owner_nusd_account.to_account_info(),
             ctx.accounts.owner.to_account_info(),
-            principal_paid_u64,
+            burned_nusd_u64,
             ctx.accounts.nusd_mint.decimals,
             &[],
         )?;
@@ -345,7 +356,7 @@ pub fn repay_nusd(ctx: Context<RepayNusd>, amount: u64) -> Result<()> {
     require_mint_supply_decrease(
         nusd_supply_before,
         ctx.accounts.nusd_mint.supply,
-        principal_paid_u64,
+        burned_nusd_u64,
     )?;
     require_recorded_amount_covered(
         ctx.accounts.insurance_nusd_vault.amount,

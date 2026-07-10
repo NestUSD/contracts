@@ -133,6 +133,7 @@ impl Vault {
 pub struct RepayOutcome {
     pub fee_paid: u128,
     pub principal_paid: u128,
+    pub bad_debt_repaid: u128,
     pub overpayment: u128,
 }
 
@@ -146,6 +147,7 @@ pub struct LiquidationOutcome {
     pub insurance_collateral_raw: u128,
     pub insurance_nusd_burned: u128,
     pub fee_cancelled: u128,
+    pub bad_debt_repaid: u128,
     pub bad_debt: u128,
     pub full_liquidation: bool,
 }
@@ -294,6 +296,17 @@ pub fn repay(
     protocol: &mut ProtocolAccounting,
     amount: u128,
 ) -> Result<RepayOutcome> {
+    let mut outcome = collect_repayment(vault, protocol, amount)?;
+    outcome.bad_debt_repaid = retire_bad_debt(protocol, outcome.fee_paid)?;
+    protocol.route_realized_fee(checked_sub(outcome.fee_paid, outcome.bad_debt_repaid)?)?;
+    Ok(outcome)
+}
+
+fn collect_repayment(
+    vault: &mut Vault,
+    protocol: &mut ProtocolAccounting,
+    amount: u128,
+) -> Result<RepayOutcome> {
     if amount == 0 {
         return Err(NestError::InvalidParameter);
     }
@@ -301,7 +314,6 @@ pub fn repay(
     vault.accrued_fee = checked_sub(vault.accrued_fee, fee_paid)?;
     protocol.total_uncollected_fees = checked_sub(protocol.total_uncollected_fees, fee_paid)?;
     protocol.total_debt = checked_sub(protocol.total_debt, fee_paid)?;
-    protocol.route_realized_fee(fee_paid)?;
 
     let remaining = checked_sub(amount, fee_paid)?;
     let principal_paid = core::cmp::min(remaining, vault.principal_debt);
@@ -312,8 +324,15 @@ pub fn repay(
     Ok(RepayOutcome {
         fee_paid,
         principal_paid,
+        bad_debt_repaid: 0,
         overpayment,
     })
+}
+
+fn retire_bad_debt(protocol: &mut ProtocolAccounting, amount: u128) -> Result<u128> {
+    let repaid = core::cmp::min(amount, protocol.bad_debt_nusd);
+    protocol.bad_debt_nusd = checked_sub(protocol.bad_debt_nusd, repaid)?;
+    Ok(repaid)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -451,9 +470,7 @@ pub fn liquidate(
     };
     let staker_penalty_nusd = core::cmp::min(penalty_value, delivered_penalty_value);
 
-    let repay_outcome = repay(vault, protocol, repay_amount)?;
-    protocol.realized_revenue_for_stakers =
-        checked_add(protocol.realized_revenue_for_stakers, staker_penalty_nusd)?;
+    let repay_outcome = collect_repayment(vault, protocol, repay_amount)?;
     vault.collateral_raw = checked_sub(vault.collateral_raw, keeper_raw)?;
 
     let mut insurance_nusd_burned = 0;
@@ -484,6 +501,15 @@ pub fn liquidate(
         }
     }
 
+    let fee_bad_debt_repaid = retire_bad_debt(protocol, repay_outcome.fee_paid)?;
+    protocol.route_realized_fee(checked_sub(repay_outcome.fee_paid, fee_bad_debt_repaid)?)?;
+    let penalty_bad_debt_repaid = retire_bad_debt(protocol, staker_penalty_nusd)?;
+    protocol.realized_revenue_for_stakers = checked_add(
+        protocol.realized_revenue_for_stakers,
+        checked_sub(staker_penalty_nusd, penalty_bad_debt_repaid)?,
+    )?;
+    let bad_debt_repaid = checked_add(fee_bad_debt_repaid, penalty_bad_debt_repaid)?;
+
     Ok(LiquidationOutcome {
         repaid_debt: repay_amount,
         fee_paid: repay_outcome.fee_paid,
@@ -493,6 +519,7 @@ pub fn liquidate(
         insurance_collateral_raw: 0,
         insurance_nusd_burned,
         fee_cancelled,
+        bad_debt_repaid,
         bad_debt,
         full_liquidation: full,
     })

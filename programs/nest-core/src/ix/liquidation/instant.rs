@@ -68,7 +68,8 @@ pub fn liquidate_with_oracle(
     )?;
     let nusd_burned_u64 = u128_to_u64(
         out.principal_paid
-            .checked_add(out.insurance_nusd_burned)
+            .checked_add(out.bad_debt_repaid)
+            .and_then(|amount| amount.checked_add(out.insurance_nusd_burned))
             .ok_or(error!(CoreError::MathOverflow))?,
     )?;
     let liquidator_nusd_before = ctx.accounts.liquidator_nusd_account.amount;
@@ -117,6 +118,7 @@ pub fn liquidate_with_oracle(
     let expected_routed_charge = out
         .fee_paid
         .checked_add(out.staker_penalty_nusd)
+        .and_then(|amount| amount.checked_sub(out.bad_debt_repaid))
         .ok_or(error!(CoreError::MathOverflow))?;
     require!(
         routed_charge == expected_routed_charge,
@@ -183,14 +185,18 @@ pub fn liquidate_with_oracle(
             protocol_delta_u64,
         )?;
     }
-    let principal_paid_u64 = u128_to_u64(out.principal_paid)?;
-    if principal_paid_u64 > 0 {
+    let liquidator_burn_u64 = u128_to_u64(
+        out.principal_paid
+            .checked_add(out.bad_debt_repaid)
+            .ok_or(error!(CoreError::MathOverflow))?,
+    )?;
+    if liquidator_burn_u64 > 0 {
         token_burn_checked(
             ctx.accounts.nusd_token_program.to_account_info(),
             ctx.accounts.nusd_mint.to_account_info(),
             ctx.accounts.liquidator_nusd_account.to_account_info(),
             ctx.accounts.liquidator.to_account_info(),
-            principal_paid_u64,
+            liquidator_burn_u64,
             ctx.accounts.nusd_mint.decimals,
             &[],
         )?;
