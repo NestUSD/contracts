@@ -44,12 +44,8 @@ fn oracle_prices_raw_xstock_conservatively() {
     let now = 1_000;
     let inputs = PricingInputs {
         xstock_usd: price(feed(1), 100 * PRICE_SCALE as u64, PRICE_SCALE as u64, now),
-        underlying_usd: price(feed(2), 110 * PRICE_SCALE as u64, PRICE_SCALE as u64, now),
-        redemption_rate: price(feed(3), PRICE_SCALE as u64, 0, now),
         now,
         xstock_policy: policy(feed(1)),
-        underlying_policy: policy(feed(2)),
-        redemption_policy: policy(feed(3)),
     };
 
     let safe = safe_raw_token_price_e8(inputs).unwrap();
@@ -67,12 +63,8 @@ fn oracle_prices_from_xstock_usd() {
     let now = 1_000;
     let inputs = PricingInputs {
         xstock_usd: price(feed(1), 130 * PRICE_SCALE as u64, 0, now),
-        underlying_usd: price(feed(2), 100 * PRICE_SCALE as u64, 0, now),
-        redemption_rate: price(feed(3), 125_000_000, 0, now),
         now,
         xstock_policy: policy(feed(1)),
-        underlying_policy: policy(feed(2)),
-        redemption_policy: policy(feed(3)),
     };
 
     let safe = safe_raw_token_price_e8(inputs).unwrap();

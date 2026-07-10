@@ -128,11 +128,7 @@ pub fn initialize_protocol(
 
 pub fn add_collateral(ctx: Context<AddCollateral>, params: AddCollateralParams) -> Result<()> {
     assert_authority(&ctx.accounts.protocol, &ctx.accounts.authority)?;
-    validate_collateral_feed_config(
-        &params.xstock_usd_feed_id,
-        &params.underlying_usd_feed_id,
-        &params.redemption_rate_feed_id,
-    )?;
+    validate_collateral_feed_config(&params.xstock_usd_feed_id)?;
     require!(
         params.collateral_decimals > 0
             && params.collateral_decimals <= 18
@@ -147,14 +143,6 @@ pub fn add_collateral(ctx: Context<AddCollateral>, params: AddCollateralParams) 
             && params.max_confidence_bps <= domain::BPS_DENOMINATOR as u16
             && params.max_staleness_seconds > 0
             && params.max_staleness_seconds <= MAX_XSTOCK_PRICE_STALENESS_SECONDS
-            && params.closed_market_max_staleness_seconds >= params.max_staleness_seconds
-            && params.closed_market_max_staleness_seconds <= CLOSED_MARKET_MAX_STALENESS_SECONDS
-            && params.underlying_closed_market_max_staleness_seconds
-                >= params.closed_market_max_staleness_seconds
-            && params.underlying_closed_market_max_staleness_seconds
-                <= UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS
-            && params.closed_market_haircut_bps > 0
-            && params.closed_market_haircut_bps <= MAX_CLOSED_MARKET_HAIRCUT_BPS
             && valid_collateral_token_program(params.token_program)
             && params.per_vault_debt_cap > 0
             && params.protocol_debt_cap > 0
@@ -192,18 +180,17 @@ pub fn add_collateral(ctx: Context<AddCollateral>, params: AddCollateralParams) 
     config.symbol = params.symbol;
     config.collateral_decimals = params.collateral_decimals;
     config.xstock_usd_feed_id = params.xstock_usd_feed_id;
-    config.underlying_usd_feed_id = params.underlying_usd_feed_id;
-    config.redemption_rate_feed_id = params.redemption_rate_feed_id;
+    config.reserved_underlying_usd_feed_id = [0; 32];
+    config.reserved_redemption_rate_feed_id = [0; 32];
     config.borrow_ltv_bps = params.borrow_ltv_bps;
     config.liquidation_threshold_bps = params.liquidation_threshold_bps;
     config.liquidation_penalty_bps = params.liquidation_penalty_bps;
     config.close_factor_bps = params.close_factor_bps;
     config.max_confidence_bps = params.max_confidence_bps;
     config.max_staleness_seconds = params.max_staleness_seconds;
-    config.closed_market_max_staleness_seconds = params.closed_market_max_staleness_seconds;
-    config.underlying_closed_market_max_staleness_seconds =
-        params.underlying_closed_market_max_staleness_seconds;
-    config.closed_market_haircut_bps = params.closed_market_haircut_bps;
+    config.reserved_closed_market_max_staleness_seconds = 0;
+    config.reserved_underlying_closed_market_max_staleness_seconds = 0;
+    config.reserved_closed_market_haircut_bps = 0;
     config.per_vault_debt_cap = params.per_vault_debt_cap;
     config.protocol_debt_cap = params.protocol_debt_cap;
     config.deposit_cap_raw = params.deposit_cap_raw;

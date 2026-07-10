@@ -36,12 +36,7 @@ pub fn refresh_lazer_oracle(
     oracle.protocol = ctx.accounts.protocol.key();
     oracle.collateral_config = ctx.accounts.collateral_config.key();
     oracle.xstock_usd = xstock_usd;
-    oracle.underlying_usd =
-        inactive_oracle_price(ctx.accounts.collateral_config.underlying_usd_feed_id);
-    oracle.redemption_rate =
-        inactive_oracle_price(ctx.accounts.collateral_config.redemption_rate_feed_id);
-    oracle.market_state = MarketStateAccount::Regular;
-    oracle.calendar_valid_until_ts = 0;
+    clear_reserved_oracle_fields(oracle);
     oracle.bump = ctx.bumps.oracle;
     Ok(())
 }
@@ -93,12 +88,14 @@ pub fn refresh_signed_oracle(
     oracle.protocol = ctx.accounts.protocol.key();
     oracle.collateral_config = ctx.accounts.collateral_config.key();
     oracle.xstock_usd = xstock_usd;
-    oracle.underlying_usd =
-        inactive_oracle_price(ctx.accounts.collateral_config.underlying_usd_feed_id);
-    oracle.redemption_rate =
-        inactive_oracle_price(ctx.accounts.collateral_config.redemption_rate_feed_id);
-    oracle.market_state = MarketStateAccount::Regular;
-    oracle.calendar_valid_until_ts = 0;
+    clear_reserved_oracle_fields(oracle);
     oracle.bump = ctx.bumps.oracle;
     Ok(())
+}
+
+fn clear_reserved_oracle_fields(oracle: &mut OracleSnapshot) {
+    oracle.reserved_underlying_usd = inactive_oracle_price([0; 32]);
+    oracle.reserved_redemption_rate = inactive_oracle_price([0; 32]);
+    oracle.reserved_market_state = MarketStateAccount::Regular;
+    oracle.reserved_calendar_valid_until_ts = 0;
 }

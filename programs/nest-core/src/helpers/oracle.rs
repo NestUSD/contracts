@@ -10,34 +10,9 @@ const ED25519_SIGNATURE_OFFSETS_START: usize = 2;
 const ED25519_SIGNATURE_OFFSETS_SIZE: usize = 14;
 const ED25519_CURRENT_INSTRUCTION: usize = u16::MAX as usize;
 
-fn valid_price_feed_ids(xstock: &[u8; 32], underlying: &[u8; 32], redemption: &[u8; 32]) -> bool {
-    let zero = [0; 32];
-    if *xstock == zero {
-        return false;
-    }
-    if *underlying != zero && underlying == xstock {
-        return false;
-    }
-    if *redemption != zero && redemption == xstock {
-        return false;
-    }
-    if *underlying != zero && *redemption != zero && underlying == redemption {
-        return false;
-    }
-    true
-}
-
-fn validate_collateral_feed_config(
-    xstock: &[u8; 32],
-    underlying: &[u8; 32],
-    redemption: &[u8; 32],
-) -> Result<()> {
+fn validate_collateral_feed_config(xstock: &[u8; 32]) -> Result<()> {
     require!(
-        valid_price_feed_ids(xstock, underlying, redemption),
-        CoreError::InvalidParameter
-    );
-    require!(
-        is_lazer_feed_key(xstock) || is_signed_feed_key(xstock),
+        *xstock != [0; 32] && (is_lazer_feed_key(xstock) || is_signed_feed_key(xstock)),
         CoreError::InvalidParameter
     );
     Ok(())
@@ -54,12 +29,8 @@ pub(crate) fn raw_token_safe_price_from_snapshot(
     );
     domain::safe_raw_token_price_e8(domain::PricingInputs {
         xstock_usd: to_domain_price(oracle.xstock_usd),
-        underlying_usd: to_domain_price(oracle.underlying_usd),
-        redemption_rate: to_domain_price(oracle.redemption_rate),
         now: clock.unix_timestamp,
         xstock_policy: policy(config.xstock_usd_feed_id, config)?,
-        underlying_policy: policy(config.underlying_usd_feed_id, config)?,
-        redemption_policy: policy(config.redemption_rate_feed_id, config)?,
     })
     .map_err(map_core_error)
 }
@@ -81,12 +52,8 @@ fn validate_xstock_oracle_price(
 ) -> Result<()> {
     domain::safe_raw_token_price_e8(domain::PricingInputs {
         xstock_usd: to_domain_price(xstock_usd),
-        underlying_usd: to_domain_price(inactive_oracle_price(config.underlying_usd_feed_id)),
-        redemption_rate: to_domain_price(inactive_oracle_price(config.redemption_rate_feed_id)),
         now,
         xstock_policy: policy(config.xstock_usd_feed_id, config)?,
-        underlying_policy: policy(config.underlying_usd_feed_id, config)?,
-        redemption_policy: policy(config.redemption_rate_feed_id, config)?,
     })
     .map(|_| ())
     .map_err(map_core_error)

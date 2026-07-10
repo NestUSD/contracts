@@ -27,9 +27,6 @@ const MAX_STABILITY_FEE_APR_BPS: u64 = 1_000;
 const MAX_STAKER_TARGET_APR_BPS: u64 = 2_000;
 const MAX_STAKER_CAPACITY_KAMINO_APR_BPS: u64 = 2_000;
 const SECONDS_PER_DAY: i64 = 86_400;
-const CLOSED_MARKET_MAX_STALENESS_SECONDS: i64 = 86_400;
-const UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS: i64 = 5 * SECONDS_PER_DAY;
-const MAX_CLOSED_MARKET_HAIRCUT_BPS: u16 = 9_500;
 const MAX_XSTOCK_PRICE_STALENESS_SECONDS: i64 = 120;
 const STAKING_STATE_DISCRIMINATOR: [u8; 8] = [152, 226, 234, 201, 202, 8, 155, 60];
 const STAKING_STATE_NUSD_MINT_OFFSET: usize = 40;
@@ -295,24 +292,14 @@ pub mod nest_core {
     pub fn set_collateral_oracle_params(
         ctx: Context<MutateCollateral>,
         xstock_usd_feed_id: [u8; 32],
-        underlying_usd_feed_id: [u8; 32],
-        redemption_rate_feed_id: [u8; 32],
         max_confidence_bps: u16,
         max_staleness_seconds: i64,
-        closed_market_max_staleness_seconds: i64,
-        underlying_closed_market_max_staleness_seconds: i64,
-        closed_market_haircut_bps: u16,
     ) -> Result<()> {
         ix::admin::set_collateral_oracle_params(
             ctx,
             xstock_usd_feed_id,
-            underlying_usd_feed_id,
-            redemption_rate_feed_id,
             max_confidence_bps,
             max_staleness_seconds,
-            closed_market_max_staleness_seconds,
-            underlying_closed_market_max_staleness_seconds,
-            closed_market_haircut_bps,
         )
     }
 }

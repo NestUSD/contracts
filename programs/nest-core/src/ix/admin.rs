@@ -224,46 +224,34 @@ pub fn set_collateral_caps(
 pub fn set_collateral_oracle_params(
     ctx: Context<MutateCollateral>,
     xstock_usd_feed_id: [u8; 32],
-    underlying_usd_feed_id: [u8; 32],
-    redemption_rate_feed_id: [u8; 32],
     max_confidence_bps: u16,
     max_staleness_seconds: i64,
-    closed_market_max_staleness_seconds: i64,
-    underlying_closed_market_max_staleness_seconds: i64,
-    closed_market_haircut_bps: u16,
 ) -> Result<()> {
     require!(
         max_confidence_bps > 0
             && max_confidence_bps <= domain::BPS_DENOMINATOR as u16
             && max_staleness_seconds > 0
-            && max_staleness_seconds <= MAX_XSTOCK_PRICE_STALENESS_SECONDS
-            && closed_market_max_staleness_seconds >= max_staleness_seconds
-            && closed_market_max_staleness_seconds <= CLOSED_MARKET_MAX_STALENESS_SECONDS
-            && underlying_closed_market_max_staleness_seconds
-                >= closed_market_max_staleness_seconds
-            && underlying_closed_market_max_staleness_seconds
-                <= UNDERLYING_CLOSED_MARKET_MAX_STALENESS_SECONDS
-            && closed_market_haircut_bps > 0
-            && closed_market_haircut_bps <= MAX_CLOSED_MARKET_HAIRCUT_BPS,
+            && max_staleness_seconds <= MAX_XSTOCK_PRICE_STALENESS_SECONDS,
         CoreError::InvalidParameter
     );
-    validate_collateral_feed_config(
-        &xstock_usd_feed_id,
-        &underlying_usd_feed_id,
-        &redemption_rate_feed_id,
-    )?;
+    validate_collateral_feed_config(&xstock_usd_feed_id)?;
     ctx.accounts.collateral_config.xstock_usd_feed_id = xstock_usd_feed_id;
-    ctx.accounts.collateral_config.underlying_usd_feed_id = underlying_usd_feed_id;
-    ctx.accounts.collateral_config.redemption_rate_feed_id = redemption_rate_feed_id;
+    ctx.accounts
+        .collateral_config
+        .reserved_underlying_usd_feed_id = [0; 32];
+    ctx.accounts
+        .collateral_config
+        .reserved_redemption_rate_feed_id = [0; 32];
     ctx.accounts.collateral_config.max_confidence_bps = max_confidence_bps;
     ctx.accounts.collateral_config.max_staleness_seconds = max_staleness_seconds;
     ctx.accounts
         .collateral_config
-        .closed_market_max_staleness_seconds = closed_market_max_staleness_seconds;
+        .reserved_closed_market_max_staleness_seconds = 0;
     ctx.accounts
         .collateral_config
-        .underlying_closed_market_max_staleness_seconds =
-        underlying_closed_market_max_staleness_seconds;
-    ctx.accounts.collateral_config.closed_market_haircut_bps = closed_market_haircut_bps;
+        .reserved_underlying_closed_market_max_staleness_seconds = 0;
+    ctx.accounts
+        .collateral_config
+        .reserved_closed_market_haircut_bps = 0;
     Ok(())
 }

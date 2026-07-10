@@ -23,12 +23,8 @@ pub struct PricePolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PricingInputs {
     pub xstock_usd: OraclePrice,
-    pub underlying_usd: OraclePrice,
-    pub redemption_rate: OraclePrice,
     pub now: i64,
     pub xstock_policy: PricePolicy,
-    pub underlying_policy: PricePolicy,
-    pub redemption_policy: PricePolicy,
 }
 
 pub fn lower_confidence_bound(price: OraclePrice, policy: PricePolicy, now: i64) -> Result<u128> {
@@ -74,8 +70,6 @@ pub fn lower_confidence_bound(price: OraclePrice, policy: PricePolicy, now: i64)
 }
 
 pub fn safe_raw_token_price_e8(inputs: PricingInputs) -> Result<u128> {
-    // Collateral is priced from the xStock/USD feed. The remaining feed fields
-    // are inert under this policy but still validated by the shared input type.
     lower_confidence_bound(inputs.xstock_usd, inputs.xstock_policy, inputs.now)
 }
 

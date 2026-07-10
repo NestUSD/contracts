@@ -53,7 +53,7 @@
     }
 
     #[test]
-    fn snapshot_pricing_uses_xstock_staleness_cap_only() {
+    fn snapshot_pricing_uses_configured_xstock_staleness() {
         let mut config = lazer_config(1);
         config.max_staleness_seconds = 5;
 
@@ -63,15 +63,12 @@
                 .max_staleness_seconds,
             5
         );
-        assert_eq!(
-            inactive_oracle_price(config.underlying_usd_feed_id),
-            OraclePriceAccount {
-                feed_id: config.underlying_usd_feed_id,
-                price_e8: 0,
-                confidence_e8: 0,
-                publish_time: 0,
-            }
-        );
+    }
+
+    #[test]
+    fn reserved_oracle_slots_preserve_deployed_account_sizes() {
+        assert_eq!(CollateralConfig::INIT_SPACE, 393);
+        assert_eq!(OracleSnapshot::INIT_SPACE, 242);
     }
 
     #[test]
@@ -125,17 +122,17 @@
             symbol: [0; 16],
             collateral_decimals: 6,
             xstock_usd_feed_id,
-            underlying_usd_feed_id: [0; 32],
-            redemption_rate_feed_id: [0; 32],
+            reserved_underlying_usd_feed_id: [0; 32],
+            reserved_redemption_rate_feed_id: [0; 32],
             borrow_ltv_bps: 4_500,
             liquidation_threshold_bps: 5_500,
             liquidation_penalty_bps: 800,
             close_factor_bps: 5_000,
             max_confidence_bps: 200,
             max_staleness_seconds: 120,
-            closed_market_max_staleness_seconds: 86_400,
-            underlying_closed_market_max_staleness_seconds: 432_000,
-            closed_market_haircut_bps: 9_500,
+            reserved_closed_market_max_staleness_seconds: 0,
+            reserved_underlying_closed_market_max_staleness_seconds: 0,
+            reserved_closed_market_haircut_bps: 0,
             per_vault_debt_cap: 1,
             protocol_debt_cap: 1,
             deposit_cap_raw: 1,
@@ -196,15 +193,13 @@
 
     #[test]
     fn collateral_feed_config_accepts_lazer_or_signed_xstock_feed_id() {
-        let zero = [0_u8; 32];
         let mut lazer_feed = [0_u8; 32];
         lazer_feed[..4].copy_from_slice(&1_843_u32.to_le_bytes());
         let signed_feed = [7_u8; 32];
 
-        assert!(validate_collateral_feed_config(&lazer_feed, &zero, &zero).is_ok());
-        assert!(validate_collateral_feed_config(&signed_feed, &zero, &zero).is_ok());
-        assert!(validate_collateral_feed_config(&zero, &zero, &zero).is_err());
-        assert!(validate_collateral_feed_config(&lazer_feed, &lazer_feed, &zero).is_err());
+        assert!(validate_collateral_feed_config(&lazer_feed).is_ok());
+        assert!(validate_collateral_feed_config(&signed_feed).is_ok());
+        assert!(validate_collateral_feed_config(&[0; 32]).is_err());
     }
 
     #[test]
