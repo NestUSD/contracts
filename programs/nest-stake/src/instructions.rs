@@ -153,6 +153,7 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
 }
 
 pub fn harvest(ctx: Context<Harvest>, amount: u64) -> Result<()> {
+    assert_authority(&ctx.accounts.staking_state, &ctx.accounts.authority)?;
     require!(amount > 0, StakeError::InvalidParameter);
     require!(
         ctx.accounts.staking_state.total_shares > 0,

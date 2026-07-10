@@ -65,7 +65,7 @@ pub struct Stake<'info> {
 
 #[derive(Accounts)]
 pub struct Harvest<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
+    #[account(mut, seeds = [b"staking"], bump = staking_state.bump, has_one = authority)]
     pub staking_state: Box<Account<'info, StakingState>>,
     #[account(mut, address = staking_state.nusd_mint)]
     pub nusd_mint: InterfaceAccount<'info, Mint>,
@@ -73,6 +73,7 @@ pub struct Harvest<'info> {
     pub revenue_nusd_account: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, address = staking_state.staking_nusd_vault, token::mint = nusd_mint, token::authority = staking_state, token::token_program = nusd_token_program)]
     pub staking_nusd_vault: InterfaceAccount<'info, TokenAccount>,
+    pub authority: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
 }
