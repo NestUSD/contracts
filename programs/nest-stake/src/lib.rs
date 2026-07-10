@@ -35,8 +35,8 @@ pub mod nest_stake {
         instructions::initialize_staking(ctx, params)
     }
 
-    pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
-        instructions::stake(ctx, amount)
+    pub fn stake(ctx: Context<Stake>, amount: u64, min_shares_out: u64) -> Result<()> {
+        instructions::stake(ctx, amount, min_shares_out)
     }
 
     pub fn harvest(ctx: Context<Harvest>, amount: u64) -> Result<()> {

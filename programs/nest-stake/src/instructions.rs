@@ -63,8 +63,11 @@ pub fn initialize_staking(
     Ok(())
 }
 
-pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
-    require!(amount > 0, StakeError::InvalidParameter);
+pub fn stake(ctx: Context<Stake>, amount: u64, min_shares_out: u64) -> Result<()> {
+    require!(
+        amount > 0 && min_shares_out > 0,
+        StakeError::InvalidParameter
+    );
     require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
     checkpoint_staker_target_revenue(
         ctx.accounts.protocol.to_account_info(),
@@ -85,6 +88,10 @@ pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
     let minted_shares = pool
         .stake(amount as u128, pending_revenue, now)
         .map_err(map_stake_error)?;
+    require!(
+        minted_shares >= min_shares_out as u128,
+        StakeError::InsufficientAssets
+    );
     if let Some(capacity) = staking_capacity_from_protocol(
         &ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.nusd_mint,

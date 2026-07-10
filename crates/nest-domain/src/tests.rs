@@ -1285,6 +1285,33 @@ fn staking_rejects_zero_harvest() {
 }
 
 #[test]
+fn staking_rejects_dust_bootstrap_and_bounds_first_staker_rounding() {
+    let mut pool = StakingPool::default();
+    assert_eq!(
+        pool.stake(MIN_INITIAL_STAKE_NUSD - 1, 0, 0),
+        Err(NestError::InvalidParameter)
+    );
+
+    let attacker_stake = MIN_INITIAL_STAKE_NUSD;
+    let donated_revenue = 50_000_000;
+    let attacker_shares = pool.stake(attacker_stake, 0, 0).unwrap();
+    pool.harvest(donated_revenue, 1).unwrap();
+    let victim_shares = pool.stake(100_000_000, 0, 2).unwrap();
+    assert!(victim_shares > 1_900_000);
+
+    let vesting_done = 1 + DEFAULT_REVENUE_VESTING_SECONDS;
+    pool.sync_vesting(vesting_done).unwrap();
+    let pending = pool.request_unstake(attacker_shares, vesting_done).unwrap();
+    let attacker_redeemed = pool
+        .complete_unstake(pending, vesting_done + DEFAULT_COOLDOWN_SECONDS)
+        .unwrap();
+
+    let attacker_cost = attacker_stake + donated_revenue;
+    let rounding_bound = attacker_cost / attacker_shares + 1;
+    assert!(attacker_redeemed.saturating_sub(attacker_cost) <= rounding_bound);
+}
+
+#[test]
 fn staking_losses_socialize_to_pending_shares() {
     let mut pool = StakingPool::default();
     pool.stake(100_000_000, 0, 0).unwrap();

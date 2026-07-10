@@ -1,6 +1,6 @@
 use crate::{
     checked_add, checked_sub, mul_div_down, NestError, Result, DEFAULT_COOLDOWN_SECONDS,
-    DEFAULT_REVENUE_VESTING_SECONDS,
+    DEFAULT_REVENUE_VESTING_SECONDS, MIN_INITIAL_STAKE_NUSD,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +77,9 @@ impl StakingPool {
 
     pub fn stake(&mut self, amount: u128, pending_revenue: u128, now: i64) -> Result<u128> {
         if amount == 0 {
+            return Err(NestError::InvalidParameter);
+        }
+        if self.total_shares == 0 && amount < MIN_INITIAL_STAKE_NUSD {
             return Err(NestError::InvalidParameter);
         }
         self.sync_vesting(now)?;
