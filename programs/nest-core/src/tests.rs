@@ -271,15 +271,15 @@
     }
 
     #[test]
-    fn psm_outflow_breaker_allows_exact_limit_and_pauses_on_excess() {
+    fn psm_outflow_breaker_allows_exact_limit_and_rejects_excess() {
         let mut protocol = protocol_for_psm_outflow_test();
 
-        assert!(record_psm_outflow_or_pause(&mut protocol, 100, 1_000, 10).unwrap());
+        record_psm_outflow(&mut protocol, 100, 1_000, 10).unwrap();
         assert!(!protocol.paused);
         assert_eq!(protocol.psm_outflow_window_usdc, 100);
 
-        assert!(!record_psm_outflow_or_pause(&mut protocol, 1, 900, 11).unwrap());
-        assert!(protocol.paused);
+        assert!(record_psm_outflow(&mut protocol, 1, 900, 11).is_err());
+        assert!(!protocol.paused);
         assert_eq!(protocol.psm_outflow_window_usdc, 100);
     }
 

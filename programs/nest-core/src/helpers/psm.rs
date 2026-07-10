@@ -23,14 +23,14 @@ fn require_psm_accounting_invariants(protocol: &Protocol, actual_psm_usdc: u64) 
     require_recorded_amount_covered(actual_psm_usdc, protocol.psm_idle_usdc)
 }
 
-fn record_psm_outflow_or_pause(
+fn record_psm_outflow(
     protocol: &mut Protocol,
     amount: u128,
     liquid_basis: u128,
     now: i64,
-) -> Result<bool> {
+) -> Result<()> {
     if !protocol.psm_outflow_circuit_breaker_enabled {
-        return Ok(true);
+        return Ok(());
     }
     require!(
         (protocol.psm_outflow_limit_usdc > 0 || protocol.psm_outflow_limit_bps > 0)
@@ -74,10 +74,10 @@ fn record_psm_outflow_or_pause(
         .psm_outflow_window_usdc
         .checked_add(amount)
         .ok_or(error!(CoreError::MathOverflow))?;
-    if next_window_usdc > active_limit {
-        protocol.paused = true;
-        return Ok(false);
-    }
+    require!(
+        next_window_usdc <= active_limit,
+        CoreError::PsmOutflowLimitExceeded
+    );
     protocol.psm_outflow_window_usdc = next_window_usdc;
-    Ok(true)
+    Ok(())
 }

@@ -48,4 +48,6 @@ pub enum CoreError {
     InsufficientLiquidationProceeds,
     #[msg("psm outflow circuit breaker configuration is invalid")]
     InvalidPsmOutflowCircuitBreaker,
+    #[msg("psm outflow circuit breaker limit exceeded")]
+    PsmOutflowLimitExceeded,
 }

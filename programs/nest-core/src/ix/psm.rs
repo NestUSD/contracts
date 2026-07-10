@@ -87,10 +87,7 @@ pub fn psm_swap_out(ctx: Context<PsmSwapOut>, amount: u64) -> Result<()> {
         CoreError::PsmInsufficientLiquidity
     );
     let psm_idle_before = protocol.psm_idle_usdc;
-    let outflow_allowed = record_psm_outflow_or_pause(protocol, amount_u128, psm_idle_before, now)?;
-    if !outflow_allowed {
-        return Ok(());
-    }
+    record_psm_outflow(protocol, amount_u128, psm_idle_before, now)?;
     protocol.psm_usdc_liabilities = protocol
         .psm_usdc_liabilities
         .checked_sub(amount_u128)
