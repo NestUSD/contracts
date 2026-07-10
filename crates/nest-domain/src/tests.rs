@@ -555,24 +555,44 @@ fn borrow_enforces_per_collateral_debt_cap() {
 #[test]
 fn borrow_reserves_caps_for_pending_liquidations() {
     let vault = Vault::default();
-    let mut protocol = ProtocolAccounting::new();
-    protocol.total_debt = 40_000_000;
-    protocol.pending_liquidation_principal = 50_000_000;
+    let protocol = ProtocolAccounting {
+        total_debt: 40_000_000,
+        pending_liquidation_principal: 50_000_000,
+        pending_liquidation_fees: 5_000_000,
+        ..ProtocolAccounting::new()
+    };
 
-    let mut params = CollateralParams::default();
-    params.per_vault_debt_cap = u128::MAX;
-    params.protocol_debt_cap = 100_000_000;
-    params.collateral_debt_cap = 1_000_000_000;
+    let protocol_cap_params = CollateralParams {
+        per_vault_debt_cap: u128::MAX,
+        protocol_debt_cap: 100_000_000,
+        collateral_debt_cap: 1_000_000_000,
+        ..CollateralParams::default()
+    };
     assert_eq!(
-        can_borrow(1_000_000_000, vault, params, protocol, 10_000_001,),
+        can_borrow(
+            1_000_000_000,
+            vault,
+            protocol_cap_params,
+            protocol,
+            5_000_001,
+        ),
         Err(NestError::DebtCapExceeded)
     );
 
-    params.protocol_debt_cap = 1_000_000_000;
-    params.collateral_debt_cap = 100_000_000;
-    params.collateral_debt_outstanding = 40_000_000;
+    let collateral_cap_params = CollateralParams {
+        protocol_debt_cap: 1_000_000_000,
+        collateral_debt_cap: 100_000_000,
+        collateral_debt_outstanding: 40_000_000,
+        ..protocol_cap_params
+    };
     assert_eq!(
-        can_borrow(1_000_000_000, vault, params, protocol, 10_000_001,),
+        can_borrow(
+            1_000_000_000,
+            vault,
+            collateral_cap_params,
+            protocol,
+            5_000_001,
+        ),
         Err(NestError::DebtCapExceeded)
     );
 }

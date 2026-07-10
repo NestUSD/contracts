@@ -11,6 +11,7 @@ fn domain_protocol(protocol: &Protocol) -> domain::ProtocolAccounting {
     domain::ProtocolAccounting {
         total_debt: protocol.total_debt,
         pending_liquidation_principal: protocol.pending_liquidation_principal,
+        pending_liquidation_fees: protocol.pending_liquidation_fees,
         total_uncollected_fees: protocol.total_uncollected_fees,
         realized_revenue_for_stakers: protocol.realized_revenue_for_stakers,
         insurance_fund_nusd: protocol.insurance_fund_nusd,

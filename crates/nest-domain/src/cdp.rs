@@ -63,6 +63,7 @@ impl Default for CollateralParams {
 pub struct ProtocolAccounting {
     pub total_debt: u128,
     pub pending_liquidation_principal: u128,
+    pub pending_liquidation_fees: u128,
     pub total_uncollected_fees: u128,
     pub realized_revenue_for_stakers: u128,
     pub insurance_fund_nusd: u128,
@@ -239,17 +240,19 @@ pub fn can_borrow(
     if debt_after > params.per_vault_debt_cap {
         return Err(NestError::VaultDebtCapExceeded);
     }
-    let reserved_debt = checked_add(protocol.total_debt, protocol.pending_liquidation_principal)?;
+    let pending_liquidation_debt = checked_add(
+        protocol.pending_liquidation_principal,
+        protocol.pending_liquidation_fees,
+    )?;
+    let reserved_debt = checked_add(protocol.total_debt, pending_liquidation_debt)?;
     if checked_add(reserved_debt, borrow_amount)? > params.protocol_debt_cap {
         return Err(NestError::DebtCapExceeded);
     }
     // Pending receipts are tracked globally. Reserving all of them against each
     // market is conservative, but prevents a market cap from reopening while
     // seized collateral is still awaiting settlement.
-    let reserved_collateral_debt = checked_add(
-        params.collateral_debt_outstanding,
-        protocol.pending_liquidation_principal,
-    )?;
+    let reserved_collateral_debt =
+        checked_add(params.collateral_debt_outstanding, pending_liquidation_debt)?;
     if checked_add(reserved_collateral_debt, borrow_amount)? > params.collateral_debt_cap {
         return Err(NestError::DebtCapExceeded);
     }
