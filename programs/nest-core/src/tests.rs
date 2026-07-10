@@ -543,6 +543,31 @@
     }
 
     #[test]
+    fn open_liquidation_can_settle_after_authority_rotation() {
+        let original_liquidator = Pubkey::new_unique();
+        let current_authority = Pubkey::new_unique();
+
+        assert!(ix::liquidation::two_step::require_liquidation_settlement_authority(
+            current_authority,
+            original_liquidator,
+            original_liquidator,
+        )
+        .is_ok());
+        assert!(ix::liquidation::two_step::require_liquidation_settlement_authority(
+            current_authority,
+            original_liquidator,
+            current_authority,
+        )
+        .is_ok());
+        assert!(ix::liquidation::two_step::require_liquidation_settlement_authority(
+            current_authority,
+            original_liquidator,
+            Pubkey::new_unique(),
+        )
+        .is_err());
+    }
+
+    #[test]
     fn staking_state_reader_offsets_match_serialized_layout() {
         #[derive(AnchorSerialize)]
         struct StakingStateLayout {

@@ -184,11 +184,11 @@ pub fn settle_liquidation_proceeds(
     usdc_amount: u64,
 ) -> Result<()> {
     require!(usdc_amount > 0, CoreError::InvalidParameter);
-    require_keys_eq!(
+    require_liquidation_settlement_authority(
         ctx.accounts.protocol.liquidation_authority,
+        ctx.accounts.liquidation_receipt.liquidator,
         ctx.accounts.liquidator.key(),
-        CoreError::Unauthorized
-    );
+    )?;
     let principal_debt = ctx.accounts.liquidation_receipt.principal_debt;
     let accrued_fee = ctx.accounts.liquidation_receipt.accrued_fee;
     let min_settlement_usdc = ctx.accounts.liquidation_receipt.min_settlement_usdc;
@@ -381,6 +381,18 @@ pub fn settle_liquidation_proceeds(
         )?;
     }
     require_psm_accounting_invariants(&ctx.accounts.protocol, ctx.accounts.psm_usdc_vault.amount)?;
+    Ok(())
+}
+
+pub(crate) fn require_liquidation_settlement_authority(
+    current_authority: Pubkey,
+    receipt_liquidator: Pubkey,
+    signer: Pubkey,
+) -> Result<()> {
+    require!(
+        signer == receipt_liquidator || signer == current_authority,
+        CoreError::Unauthorized
+    );
     Ok(())
 }
 

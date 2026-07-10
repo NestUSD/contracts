@@ -91,7 +91,6 @@ pub struct SettleLiquidationProceeds<'info> {
         mut,
         close = liquidator,
         has_one = protocol,
-        has_one = liquidator,
         seeds = [b"liquidation", liquidation_receipt.vault.as_ref()],
         bump = liquidation_receipt.bump
     )]
