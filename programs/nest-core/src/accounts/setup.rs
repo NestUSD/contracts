@@ -16,6 +16,14 @@ pub struct InitializeProtocol<'info> {
     pub staker_revenue_authority: UncheckedAccount<'info>,
     #[account(mut)]
     pub authority: Signer<'info>,
+    #[account(
+        constraint = program.programdata_address()? == Some(program_data.key()) @ CoreError::Unauthorized
+    )]
+    pub program: Program<'info, crate::program::NestCore>,
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ CoreError::Unauthorized
+    )]
+    pub program_data: Account<'info, ProgramData>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub usdc_token_program: Interface<'info, TokenInterface>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]

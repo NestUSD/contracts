@@ -4,6 +4,10 @@ pub fn initialize_staking(
     ctx: Context<InitializeStaking>,
     params: InitializeStakingParams,
 ) -> Result<()> {
+    staking_capacity_from_protocol(
+        &ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.nusd_mint.key(),
+    )?;
     let (expected_nusd_mint_authority, _) =
         Pubkey::find_program_address(&[b"protocol"], &NEST_CORE_PROGRAM_ID);
     require!(

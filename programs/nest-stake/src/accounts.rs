@@ -2,6 +2,9 @@
 pub struct InitializeStaking<'info> {
     #[account(init, payer = authority, space = 8 + StakingState::INIT_SPACE, seeds = [b"staking"], bump)]
     pub staking_state: Box<Account<'info, StakingState>>,
+    /// CHECK: The initializer validates the canonical core PDA, owner, discriminator, and nUSD mint.
+    #[account(owner = NEST_CORE_PROGRAM_ID)]
+    pub protocol: UncheckedAccount<'info>,
     pub nusd_mint: InterfaceAccount<'info, Mint>,
     pub snusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, token::mint = nusd_mint, token::authority = staking_state, token::token_program = nusd_token_program)]
@@ -10,6 +13,14 @@ pub struct InitializeStaking<'info> {
     pub revenue_nusd_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut)]
     pub authority: Signer<'info>,
+    #[account(
+        constraint = program.programdata_address()? == Some(program_data.key()) @ StakeError::Unauthorized
+    )]
+    pub program: Program<'info, crate::program::NestStake>,
+    #[account(
+        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ StakeError::Unauthorized
+    )]
+    pub program_data: Account<'info, ProgramData>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
