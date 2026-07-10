@@ -66,6 +66,12 @@ pub fn initialize_staking(
 pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
     require!(amount > 0, StakeError::InvalidParameter);
     require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
+    checkpoint_staker_target_revenue(
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.nest_core_program.to_account_info(),
+        ctx.accounts.staking_state.bump,
+    )?;
     let was_empty = ctx.accounts.staking_state.total_shares == 0;
     let pending_revenue = if was_empty {
         0
@@ -163,6 +169,12 @@ pub fn harvest(ctx: Context<Harvest>, amount: u64) -> Result<()> {
         ctx.accounts.staking_state.total_shares > 0,
         StakeError::InvalidParameter
     );
+    checkpoint_staker_target_revenue(
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.nest_core_program.to_account_info(),
+        ctx.accounts.staking_state.bump,
+    )?;
     let amount_u128 = amount as u128;
     let revenue_balance = ctx.accounts.revenue_nusd_account.amount as u128;
     let harvestable = revenue_balance
@@ -263,6 +275,12 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
         !ctx.accounts.pending_withdrawal.completed,
         StakeError::AlreadyCompleted
     );
+    checkpoint_staker_target_revenue(
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.nest_core_program.to_account_info(),
+        ctx.accounts.staking_state.bump,
+    )?;
     let mut pool = domain_pool(&ctx.accounts.staking_state);
     let now = Clock::get()?.unix_timestamp;
     let assets = pool
@@ -314,6 +332,12 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
 pub fn realize_loss(ctx: Context<RealizeLoss>, amount: u64) -> Result<()> {
     require!(amount > 0, StakeError::InvalidParameter);
     assert_authority(&ctx.accounts.staking_state, &ctx.accounts.authority)?;
+    checkpoint_staker_target_revenue(
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.nest_core_program.to_account_info(),
+        ctx.accounts.staking_state.bump,
+    )?;
     let mut pool = domain_pool(&ctx.accounts.staking_state);
     pool.realize_loss(amount as u128).map_err(map_stake_error)?;
     apply_pool(&mut ctx.accounts.staking_state, pool);

@@ -20,3 +20,4 @@ default = []
 anchor-lang.workspace = true
 anchor-spl.workspace = true
 nest-domain.workspace = true
+nest-core = { path = "../nest-core", features = ["cpi"] }

@@ -43,6 +43,10 @@ pub struct RealizeLoss<'info> {
     pub nusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, address = staking_state.staking_nusd_vault, token::mint = nusd_mint, token::authority = staking_state, token::token_program = nusd_token_program)]
     pub staking_nusd_vault: InterfaceAccount<'info, TokenAccount>,
+    /// CHECK: nest-core validates its canonical protocol PDA.
+    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
+    pub protocol: UncheckedAccount<'info>,
+    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
     pub authority: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
@@ -53,8 +57,9 @@ pub struct Stake<'info> {
     #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
     pub staking_state: Box<Account<'info, StakingState>>,
     /// CHECK: Owned by nest-core; the helper verifies the discriminator and nUSD mint before reading economics.
-    #[account(owner = NEST_CORE_PROGRAM_ID)]
+    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
     pub protocol: UncheckedAccount<'info>,
+    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
     #[account(mut, address = staking_state.nusd_mint)]
     pub nusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, address = staking_state.snusd_mint)]
@@ -84,6 +89,10 @@ pub struct Harvest<'info> {
     pub revenue_nusd_account: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, address = staking_state.staking_nusd_vault, token::mint = nusd_mint, token::authority = staking_state, token::token_program = nusd_token_program)]
     pub staking_nusd_vault: InterfaceAccount<'info, TokenAccount>,
+    /// CHECK: nest-core validates its canonical protocol PDA.
+    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
+    pub protocol: UncheckedAccount<'info>,
+    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
     pub authority: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
@@ -118,6 +127,10 @@ pub struct CompleteUnstake<'info> {
     pub staking_nusd_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, token::mint = nusd_mint, token::authority = owner, token::token_program = nusd_token_program)]
     pub owner_nusd_account: InterfaceAccount<'info, TokenAccount>,
+    /// CHECK: nest-core validates its canonical protocol PDA.
+    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
+    pub protocol: UncheckedAccount<'info>,
+    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
     #[account(mut)]
     pub owner: Signer<'info>,
     pub authority: Signer<'info>,

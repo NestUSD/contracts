@@ -1,5 +1,17 @@
 use crate::*;
 
+pub fn checkpoint_staker_target_revenue(ctx: Context<CheckpointStakerTargetRevenue>) -> Result<()> {
+    let staking_assets = staking_vault_nusd_from_account(
+        &ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.protocol.nusd_mint,
+    )?;
+    sync_staker_target_revenue(
+        &mut ctx.accounts.protocol,
+        staking_assets,
+        Clock::get()?.unix_timestamp,
+    )
+}
+
 pub fn realize_psm_yield(ctx: Context<RealizePsmYield>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParameter);
     // This path routes only surplus USDC already sitting in the canonical

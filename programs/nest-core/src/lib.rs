@@ -184,6 +184,12 @@ pub mod nest_core {
         ix::revenue::cover_bad_debt(ctx, amount)
     }
 
+    pub fn checkpoint_staker_target_revenue(
+        ctx: Context<CheckpointStakerTargetRevenue>,
+    ) -> Result<()> {
+        ix::revenue::checkpoint_staker_target_revenue(ctx)
+    }
+
     pub fn set_paused(ctx: Context<MutateProtocol>, paused: bool) -> Result<()> {
         ix::admin::set_paused(ctx, paused)
     }

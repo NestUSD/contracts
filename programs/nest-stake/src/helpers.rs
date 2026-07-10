@@ -27,6 +27,24 @@ fn apply_pool(state: &mut StakingState, pool: domain::StakingPool) {
     state.last_vesting_sync_ts = pool.last_vesting_sync_ts;
 }
 
+fn checkpoint_staker_target_revenue<'info>(
+    protocol: AccountInfo<'info>,
+    staking_state: AccountInfo<'info>,
+    nest_core_program: AccountInfo<'info>,
+    staking_bump: u8,
+) -> Result<()> {
+    let bump = [staking_bump];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &bump]];
+    nest_core::cpi::checkpoint_staker_target_revenue(CpiContext::new_with_signer(
+        nest_core_program,
+        nest_core::cpi::accounts::CheckpointStakerTargetRevenue {
+            protocol,
+            staking_state,
+        },
+        signer_seeds,
+    ))
+}
+
 fn staking_capacity_from_protocol(
     protocol: &AccountInfo,
     expected_nusd_mint: Pubkey,

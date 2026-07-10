@@ -294,6 +294,24 @@
     }
 
     #[test]
+    fn staker_target_checkpoints_use_each_intervals_balance() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.staker_target_apr_bps = 1_000;
+        protocol.staker_target_last_accrual_ts = 1;
+        let half_year = domain::SECONDS_PER_YEAR as i64 / 2;
+
+        sync_staker_target_revenue(&mut protocol, 100_000_000, 1 + half_year).unwrap();
+        sync_staker_target_revenue(
+            &mut protocol,
+            200_000_000,
+            1 + domain::SECONDS_PER_YEAR as i64,
+        )
+        .unwrap();
+
+        assert_eq!(protocol.staker_target_revenue_due, 15_000_000);
+    }
+
+    #[test]
     fn psm_kamino_target_grid_never_requires_user_triggered_kamino_withdrawal() {
         for idle_usdc in [0_u128, 1, 9, 10, 100_000, 1_000_000, u64::MAX as u128] {
             for deployed_usdc in [0_u128, 1, 9, 10, 100_000, 1_000_000] {

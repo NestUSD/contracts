@@ -114,7 +114,7 @@ fn route_targeted_staker_revenue(
     Ok((staker_delta, protocol_delta))
 }
 
-fn sync_staker_target_revenue(
+pub(crate) fn sync_staker_target_revenue(
     protocol: &mut Protocol,
     staking_assets: u128,
     now: i64,

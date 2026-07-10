@@ -42,3 +42,16 @@ pub struct CoverBadDebt<'info> {
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub usdc_token_program: Interface<'info, TokenInterface>,
 }
+
+#[derive(Accounts)]
+pub struct CheckpointStakerTargetRevenue<'info> {
+    #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    /// CHECK: Only nest-stake can sign for its canonical state PDA.
+    #[account(
+        signer,
+        owner = NEST_STAKE_PROGRAM_ID,
+        address = Pubkey::find_program_address(&[b"staking"], &NEST_STAKE_PROGRAM_ID).0
+    )]
+    pub staking_state: UncheckedAccount<'info>,
+}
