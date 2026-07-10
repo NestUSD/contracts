@@ -12,6 +12,19 @@ pub fn checkpoint_staker_target_revenue(ctx: Context<CheckpointStakerTargetReven
     )
 }
 
+pub fn absorb_staking_loss(ctx: Context<AbsorbStakingLoss>, amount: u64) -> Result<()> {
+    require!(amount > 0, CoreError::InvalidParameter);
+    record_staking_loss_absorption(&mut ctx.accounts.protocol, amount as u128)
+}
+
+pub(crate) fn record_staking_loss_absorption(protocol: &mut Protocol, amount: u128) -> Result<()> {
+    require!(amount > 0, CoreError::InvalidParameter);
+    let mut accounting = domain_protocol(protocol);
+    accounting.cover_bad_debt(amount).map_err(map_core_error)?;
+    protocol.bad_debt_nusd = accounting.bad_debt_nusd;
+    Ok(())
+}
+
 pub fn realize_psm_yield(ctx: Context<RealizePsmYield>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParameter);
     // This path routes only surplus USDC already sitting in the canonical

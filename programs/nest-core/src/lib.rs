@@ -187,6 +187,10 @@ pub mod nest_core {
         ix::revenue::checkpoint_staker_target_revenue(ctx)
     }
 
+    pub fn absorb_staking_loss(ctx: Context<AbsorbStakingLoss>, amount: u64) -> Result<()> {
+        ix::revenue::absorb_staking_loss(ctx, amount)
+    }
+
     pub fn set_paused(ctx: Context<MutateProtocol>, paused: bool) -> Result<()> {
         ix::admin::set_paused(ctx, paused)
     }

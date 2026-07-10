@@ -379,6 +379,13 @@ pub fn realize_loss(ctx: Context<RealizeLoss>, amount: u64) -> Result<()> {
         ctx.accounts.staking_nusd_vault.amount,
         ctx.accounts.staking_state.staking_vault_nusd,
     )?;
+    absorb_staking_loss(
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.nest_core_program.to_account_info(),
+        ctx.accounts.staking_state.bump,
+        amount,
+    )?;
     Ok(())
 }
 

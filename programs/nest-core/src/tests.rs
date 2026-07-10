@@ -324,6 +324,18 @@
     }
 
     #[test]
+    fn staking_loss_retires_only_recorded_bad_debt() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.bad_debt_nusd = 100;
+
+        ix::revenue::record_staking_loss_absorption(&mut protocol, 40).unwrap();
+        assert_eq!(protocol.bad_debt_nusd, 60);
+        assert!(ix::revenue::record_staking_loss_absorption(&mut protocol, 61).is_err());
+        assert_eq!(protocol.bad_debt_nusd, 60);
+        assert!(ix::revenue::record_staking_loss_absorption(&mut protocol, 0).is_err());
+    }
+
+    #[test]
     fn staker_target_checkpoints_use_each_intervals_balance() {
         let mut protocol = protocol_for_psm_outflow_test();
         protocol.staker_target_apr_bps = 1_000;

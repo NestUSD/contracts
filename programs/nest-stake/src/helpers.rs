@@ -45,6 +45,28 @@ fn checkpoint_staker_target_revenue<'info>(
     ))
 }
 
+fn absorb_staking_loss<'info>(
+    protocol: AccountInfo<'info>,
+    staking_state: AccountInfo<'info>,
+    nest_core_program: AccountInfo<'info>,
+    staking_bump: u8,
+    amount: u64,
+) -> Result<()> {
+    let bump = [staking_bump];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &bump]];
+    nest_core::cpi::absorb_staking_loss(
+        CpiContext::new_with_signer(
+            nest_core_program,
+            nest_core::cpi::accounts::AbsorbStakingLoss {
+                protocol,
+                staking_state,
+            },
+            signer_seeds,
+        ),
+        amount,
+    )
+}
+
 fn staking_capacity_from_protocol(
     protocol: &AccountInfo,
     expected_nusd_mint: Pubkey,
