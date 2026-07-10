@@ -94,7 +94,10 @@ fn lazer_feed_key(feed_id: PriceFeedId) -> [u8; 32] {
     key
 }
 
-fn read_lazer_price(payload: &[u8], config: &CollateralConfig) -> Result<OraclePriceAccount> {
+fn read_lazer_price(
+    payload: &[u8],
+    config: &CollateralConfig,
+) -> Result<(OraclePriceAccount, i64)> {
     let expected_feed_id = lazer_feed_id_from_config(config)?;
     let data =
         PayloadData::deserialize_slice_le(payload).map_err(|_| error!(CoreError::OracleError))?;
@@ -133,15 +136,39 @@ fn read_lazer_price(payload: &[u8], config: &CollateralConfig) -> Result<OracleP
         publish_time_us.as_micros() <= data.timestamp_us.as_micros(),
         CoreError::OracleError
     );
-    let publish_time = i64::try_from(publish_time_us.as_micros() / 1_000_000)
+    let source_publish_time_us = i64::try_from(publish_time_us.as_micros())
         .map_err(|_| error!(CoreError::MathOverflow))?;
-    lazer_price_to_oracle_price(
+    let publish_time = source_publish_time_us
+        .checked_div(1_000_000)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    let price = lazer_price_to_oracle_price(
         expected_feed_id,
         price.ok_or(error!(CoreError::OracleError))?,
         confidence.ok_or(error!(CoreError::OracleError))?,
         exponent.ok_or(error!(CoreError::OracleError))?,
         publish_time,
-    )
+    )?;
+    Ok((price, source_publish_time_us))
+}
+
+fn require_monotonic_oracle_update(
+    oracle: &OracleSnapshot,
+    next_price: OraclePriceAccount,
+    next_source_publish_time_us: i64,
+) -> Result<()> {
+    require!(next_source_publish_time_us > 0, CoreError::OracleError);
+    if oracle.xstock_usd.feed_id != next_price.feed_id || oracle.xstock_usd.publish_time == 0 {
+        return Ok(());
+    }
+
+    require!(
+        next_source_publish_time_us >= oracle.source_publish_time_us,
+        CoreError::OracleError
+    );
+    if next_source_publish_time_us == oracle.source_publish_time_us {
+        require!(oracle.xstock_usd == next_price, CoreError::OracleError);
+    }
+    Ok(())
 }
 
 fn signed_price_message(payload: &SignedPricePayload) -> Result<Vec<u8>> {

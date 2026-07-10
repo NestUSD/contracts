@@ -131,7 +131,7 @@ pub struct OracleSnapshot {
     pub reserved_underlying_usd: OraclePriceAccount,
     pub reserved_redemption_rate: OraclePriceAccount,
     pub reserved_market_state: MarketStateAccount,
-    pub reserved_calendar_valid_until_ts: i64,
+    pub source_publish_time_us: i64,
     pub bump: u8,
 }
 

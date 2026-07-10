@@ -24,18 +24,21 @@ pub fn refresh_lazer_oracle(
         signature_index,
     )?;
     let verified = verified.get();
-    let xstock_usd = read_lazer_price(&verified.payload, &ctx.accounts.collateral_config)?;
+    let (xstock_usd, source_publish_time_us) =
+        read_lazer_price(&verified.payload, &ctx.accounts.collateral_config)?;
     let clock = Clock::get()?;
     validate_xstock_oracle_price(
         &ctx.accounts.collateral_config,
         xstock_usd,
         clock.unix_timestamp,
     )?;
+    require_monotonic_oracle_update(&ctx.accounts.oracle, xstock_usd, source_publish_time_us)?;
 
     let oracle = &mut ctx.accounts.oracle;
     oracle.protocol = ctx.accounts.protocol.key();
     oracle.collateral_config = ctx.accounts.collateral_config.key();
     oracle.xstock_usd = xstock_usd;
+    oracle.source_publish_time_us = source_publish_time_us;
     clear_reserved_oracle_fields(oracle);
     oracle.bump = ctx.bumps.oracle;
     Ok(())
@@ -83,11 +86,17 @@ pub fn refresh_signed_oracle(
         xstock_usd,
         clock.unix_timestamp,
     )?;
+    let source_publish_time_us = payload
+        .publish_time
+        .checked_mul(1_000_000)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require_monotonic_oracle_update(&ctx.accounts.oracle, xstock_usd, source_publish_time_us)?;
 
     let oracle = &mut ctx.accounts.oracle;
     oracle.protocol = ctx.accounts.protocol.key();
     oracle.collateral_config = ctx.accounts.collateral_config.key();
     oracle.xstock_usd = xstock_usd;
+    oracle.source_publish_time_us = source_publish_time_us;
     clear_reserved_oracle_fields(oracle);
     oracle.bump = ctx.bumps.oracle;
     Ok(())
@@ -97,5 +106,4 @@ fn clear_reserved_oracle_fields(oracle: &mut OracleSnapshot) {
     oracle.reserved_underlying_usd = inactive_oracle_price([0; 32]);
     oracle.reserved_redemption_rate = inactive_oracle_price([0; 32]);
     oracle.reserved_market_state = MarketStateAccount::Regular;
-    oracle.reserved_calendar_valid_until_ts = 0;
 }

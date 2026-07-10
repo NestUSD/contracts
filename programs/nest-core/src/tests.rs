@@ -172,7 +172,8 @@
 
     #[test]
     fn parses_lazer_solana_payload_with_little_endian_feed_id() {
-        let price = read_lazer_price(&sample_lazer_payload(), &lazer_config(1)).unwrap();
+        let (price, source_publish_time_us) =
+            read_lazer_price(&sample_lazer_payload(), &lazer_config(1)).unwrap();
         let mut expected_feed_key = [0_u8; 32];
         expected_feed_key[..4].copy_from_slice(&1_u32.to_le_bytes());
 
@@ -180,6 +181,7 @@
         assert_eq!(price.price_e8, 6_713_436_287_632);
         assert_eq!(price.confidence_e8, 1_500_580_860);
         assert_eq!(price.publish_time, 1_771_339_368);
+        assert_eq!(source_publish_time_us, 1_771_339_368_200_000);
     }
 
     #[test]
@@ -212,6 +214,39 @@
         assert!(validate_signed_feed_config(&lazer_feed).is_err());
         assert!(validate_lazer_feed_config(&signed_feed).is_err());
         assert!(validate_signed_feed_config(&signed_feed).is_ok());
+    }
+
+    #[test]
+    fn oracle_snapshot_rejects_older_or_conflicting_updates() {
+        let current_price = OraclePriceAccount {
+            feed_id: [7; 32],
+            price_e8: 100 * domain::PRICE_SCALE as u64,
+            confidence_e8: 10,
+            publish_time: 1_000,
+        };
+        let oracle = OracleSnapshot {
+            protocol: Pubkey::new_unique(),
+            collateral_config: Pubkey::new_unique(),
+            xstock_usd: current_price,
+            reserved_underlying_usd: inactive_oracle_price([0; 32]),
+            reserved_redemption_rate: inactive_oracle_price([0; 32]),
+            reserved_market_state: MarketStateAccount::Regular,
+            source_publish_time_us: 1_000_500_000,
+            bump: 255,
+        };
+
+        assert!(require_monotonic_oracle_update(&oracle, current_price, 1_000_499_999).is_err());
+        assert!(require_monotonic_oracle_update(&oracle, current_price, 1_000_500_000).is_ok());
+
+        let mut conflicting_price = current_price;
+        conflicting_price.price_e8 += 1;
+        assert!(
+            require_monotonic_oracle_update(&oracle, conflicting_price, 1_000_500_000).is_err()
+        );
+        assert!(require_monotonic_oracle_update(&oracle, conflicting_price, 1_000_500_001).is_ok());
+
+        conflicting_price.feed_id = [8; 32];
+        assert!(require_monotonic_oracle_update(&oracle, conflicting_price, 1).is_ok());
     }
 
     fn protocol_for_psm_outflow_test() -> Protocol {
