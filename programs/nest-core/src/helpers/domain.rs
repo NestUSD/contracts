@@ -10,6 +10,7 @@ fn domain_vault(vault: &Vault) -> domain::Vault {
 fn domain_protocol(protocol: &Protocol) -> domain::ProtocolAccounting {
     domain::ProtocolAccounting {
         total_debt: protocol.total_debt,
+        pending_liquidation_principal: protocol.pending_liquidation_principal,
         total_uncollected_fees: protocol.total_uncollected_fees,
         realized_revenue_for_stakers: protocol.realized_revenue_for_stakers,
         insurance_fund_nusd: protocol.insurance_fund_nusd,
