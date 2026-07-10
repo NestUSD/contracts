@@ -599,7 +599,7 @@ fn zero_value_debt_operations_are_rejected() {
 }
 
 #[test]
-fn liquidation_routes_penalty_to_stakers() {
+fn liquidation_routes_penalty_through_revenue_policy() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault {
         collateral_raw: 1_000_000_000,
@@ -630,17 +630,15 @@ fn liquidation_routes_penalty_to_stakers() {
     assert_eq!(out.repaid_debt, 30_000_000);
     assert!(out.keeper_collateral_raw > 0);
     assert_eq!(out.insurance_collateral_raw, 0);
-    assert_eq!(out.staker_penalty_nusd, 2_400_000);
-    assert_eq!(
-        protocol.realized_revenue_for_stakers,
-        out.staker_penalty_nusd
-    );
+    assert_eq!(out.liquidation_penalty_nusd, 2_400_000);
+    assert_eq!(protocol.insurance_fund_nusd, 480_000);
+    assert_eq!(protocol.realized_revenue_for_stakers, 1_920_000);
     assert_eq!(protocol.total_debt, 30_000_000);
     assert!(vault.collateral_raw < 1_000_000_000);
 }
 
 #[test]
-fn underwater_liquidation_only_routes_realized_penalty_to_stakers() {
+fn liquidation_routes_all_penalty_to_stakers_when_insurance_is_full() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault {
         collateral_raw: 1_000_000_000,
@@ -649,6 +647,7 @@ fn underwater_liquidation_only_routes_realized_penalty_to_stakers() {
         last_accrual_ts: 0,
     };
     protocol.total_debt = vault.total_debt().unwrap();
+    protocol.insurance_fund_nusd = 6_000_000;
     let params = CollateralParams {
         borrow_ltv_bps: 4_500,
         liquidation_threshold_bps: 5_500,
@@ -672,10 +671,7 @@ fn underwater_liquidation_only_routes_realized_penalty_to_stakers() {
     assert_eq!(out.fee_paid, 0);
     assert!(out.keeper_collateral_raw > 0);
     assert_eq!(out.insurance_collateral_raw, 0);
-    assert_eq!(
-        protocol.realized_revenue_for_stakers,
-        out.staker_penalty_nusd
-    );
+    assert_eq!(protocol.realized_revenue_for_stakers, 2_400_000);
     assert_eq!(protocol.insurance_fund_nusd, insurance_nusd_before);
 }
 
@@ -1188,7 +1184,9 @@ fn liquidation_grid_preserves_collateral_and_debt_accounting() {
                         protocol.bad_debt_nusd,
                         out.bad_debt.saturating_sub(out.bad_debt_repaid)
                     );
-                    assert!(out.staker_penalty_nusd <= out.repaid_debt * 800 / BPS_DENOMINATOR + 1);
+                    assert!(
+                        out.liquidation_penalty_nusd <= out.repaid_debt * 800 / BPS_DENOMINATOR + 1
+                    );
                 }
             }
         }

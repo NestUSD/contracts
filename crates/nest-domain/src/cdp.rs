@@ -142,7 +142,7 @@ pub struct LiquidationOutcome {
     pub repaid_debt: u128,
     pub fee_paid: u128,
     pub principal_paid: u128,
-    pub staker_penalty_nusd: u128,
+    pub liquidation_penalty_nusd: u128,
     pub keeper_collateral_raw: u128,
     pub insurance_collateral_raw: u128,
     pub insurance_nusd_burned: u128,
@@ -468,7 +468,7 @@ pub fn liquidate(
     } else {
         0
     };
-    let staker_penalty_nusd = core::cmp::min(penalty_value, delivered_penalty_value);
+    let liquidation_penalty_nusd = core::cmp::min(penalty_value, delivered_penalty_value);
 
     let repay_outcome = collect_repayment(vault, protocol, repay_amount)?;
     vault.collateral_raw = checked_sub(vault.collateral_raw, keeper_raw)?;
@@ -503,18 +503,20 @@ pub fn liquidate(
 
     let fee_bad_debt_repaid = retire_bad_debt(protocol, repay_outcome.fee_paid)?;
     protocol.route_realized_fee(checked_sub(repay_outcome.fee_paid, fee_bad_debt_repaid)?)?;
-    let penalty_bad_debt_repaid = retire_bad_debt(protocol, staker_penalty_nusd)?;
-    protocol.realized_revenue_for_stakers = checked_add(
-        protocol.realized_revenue_for_stakers,
-        checked_sub(staker_penalty_nusd, penalty_bad_debt_repaid)?,
-    )?;
+    let penalty_bad_debt_repaid = retire_bad_debt(protocol, liquidation_penalty_nusd)?;
+    // A realized liquidation penalty follows the same insurance and staker
+    // routing as other protocol revenue after outstanding bad debt is retired.
+    protocol.route_realized_fee(checked_sub(
+        liquidation_penalty_nusd,
+        penalty_bad_debt_repaid,
+    )?)?;
     let bad_debt_repaid = checked_add(fee_bad_debt_repaid, penalty_bad_debt_repaid)?;
 
     Ok(LiquidationOutcome {
         repaid_debt: repay_amount,
         fee_paid: repay_outcome.fee_paid,
         principal_paid: repay_outcome.principal_paid,
-        staker_penalty_nusd,
+        liquidation_penalty_nusd,
         keeper_collateral_raw: keeper_raw,
         insurance_collateral_raw: 0,
         insurance_nusd_burned,

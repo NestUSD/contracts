@@ -63,7 +63,7 @@ pub fn liquidate_with_oracle(
     let liquidator_paid_u64 = u128_to_u64(
         out.fee_paid
             .checked_add(out.principal_paid)
-            .and_then(|amount| amount.checked_add(out.staker_penalty_nusd))
+            .and_then(|amount| amount.checked_add(out.liquidation_penalty_nusd))
             .ok_or(error!(CoreError::MathOverflow))?,
     )?;
     let nusd_burned_u64 = u128_to_u64(
@@ -117,7 +117,7 @@ pub fn liquidate_with_oracle(
         .ok_or(error!(CoreError::MathOverflow))?;
     let expected_routed_charge = out
         .fee_paid
-        .checked_add(out.staker_penalty_nusd)
+        .checked_add(out.liquidation_penalty_nusd)
         .and_then(|amount| amount.checked_sub(out.bad_debt_repaid))
         .ok_or(error!(CoreError::MathOverflow))?;
     require!(

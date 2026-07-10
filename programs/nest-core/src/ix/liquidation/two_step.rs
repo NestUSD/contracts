@@ -234,6 +234,8 @@ pub fn settle_liquidation_proceeds(
     record_liquidation_debt_settlement(&mut ctx.accounts.protocol, principal_debt, accrued_fee)?;
 
     let protocol_settlement = core::cmp::min(usdc_amount as u128, target_settlement_usdc);
+    // Accrued fees and realized penalty proceeds share the standard revenue
+    // policy; only sale proceeds above the recorded target belong to the borrower.
     let mut revenue_amount = protocol_settlement
         .checked_sub(principal_debt)
         .ok_or(error!(CoreError::MathOverflow))?;
