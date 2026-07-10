@@ -97,7 +97,7 @@ pub struct RequestUnstake<'info> {
 
 #[derive(Accounts)]
 pub struct CompleteUnstake<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
+    #[account(mut, seeds = [b"staking"], bump = staking_state.bump, has_one = authority)]
     pub staking_state: Box<Account<'info, StakingState>>,
     #[account(mut, has_one = owner, has_one = staking_state, close = owner)]
     pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
@@ -109,6 +109,7 @@ pub struct CompleteUnstake<'info> {
     pub owner_nusd_account: InterfaceAccount<'info, TokenAccount>,
     #[account(mut)]
     pub owner: Signer<'info>,
+    pub authority: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
 }

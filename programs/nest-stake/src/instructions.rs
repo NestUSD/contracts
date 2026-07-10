@@ -253,6 +253,8 @@ pub fn request_unstake(ctx: Context<RequestUnstake>, shares: u64) -> Result<()> 
 }
 
 pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
+    assert_authority(&ctx.accounts.staking_state, &ctx.accounts.authority)?;
+    require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
     require!(
         !ctx.accounts.pending_withdrawal.completed,
         StakeError::AlreadyCompleted
