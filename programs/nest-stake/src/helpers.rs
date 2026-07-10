@@ -388,6 +388,9 @@ fn map_stake_error(error: domain::NestError) -> Error {
         domain::NestError::CooldownActive => error!(StakeError::CooldownActive),
         domain::NestError::ClaimWindowActive => error!(StakeError::ClaimWindowActive),
         domain::NestError::ClaimWindowExpired => error!(StakeError::ClaimWindowExpired),
+        domain::NestError::LegacyWithdrawalNotMigrated => {
+            error!(StakeError::LegacyWithdrawalNotMigrated)
+        }
         domain::NestError::InsufficientAssets => error!(StakeError::InsufficientAssets),
         domain::NestError::Insolvent => error!(StakeError::Insolvent),
         _ => error!(StakeError::InvalidParameter),

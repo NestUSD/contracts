@@ -53,6 +53,10 @@ pub mod nest_stake {
         instructions::complete_unstake(ctx)
     }
 
+    pub fn migrate_legacy_pending_unstake(ctx: Context<MigrateLegacyPendingUnstake>) -> Result<()> {
+        instructions::migrate_legacy_pending_unstake(ctx)
+    }
+
     pub fn cancel_expired_unstake(ctx: Context<CancelExpiredUnstake>) -> Result<()> {
         instructions::cancel_expired_unstake(ctx)
     }

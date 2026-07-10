@@ -18,6 +18,7 @@ pub enum NestError {
     CooldownActive,
     ClaimWindowActive,
     ClaimWindowExpired,
+    LegacyWithdrawalNotMigrated,
     InsufficientAssets,
     Insolvent,
     PrincipalNotCovered,

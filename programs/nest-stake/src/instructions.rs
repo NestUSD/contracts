@@ -293,14 +293,6 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
         !ctx.accounts.pending_withdrawal.completed,
         StakeError::AlreadyCompleted
     );
-    if ctx.accounts.pending_withdrawal.claim_deadline_ts == 0 {
-        let authority = ctx
-            .accounts
-            .authority
-            .as_ref()
-            .ok_or(error!(StakeError::Unauthorized))?;
-        assert_authority(&ctx.accounts.staking_state, authority)?;
-    }
     require_no_bad_debt(
         &ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.nusd_mint,
@@ -356,6 +348,34 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
         ctx.accounts.staking_nusd_vault.amount,
         ctx.accounts.staking_state.staking_vault_nusd,
     )?;
+    Ok(())
+}
+
+pub fn migrate_legacy_pending_unstake(ctx: Context<MigrateLegacyPendingUnstake>) -> Result<()> {
+    require!(
+        ctx.accounts.staking_state.paused,
+        StakeError::StakingMustBePaused
+    );
+    require!(
+        !ctx.accounts.pending_withdrawal.completed,
+        StakeError::AlreadyCompleted
+    );
+    require!(
+        ctx.accounts.pending_withdrawal.reserved == 0,
+        StakeError::InvalidParameter
+    );
+    let pool = domain_pool(&ctx.accounts.staking_state);
+    let migrated = pool
+        .migrate_legacy_pending_unstake(
+            domain::PendingWithdrawal {
+                shares: ctx.accounts.pending_withdrawal.shares,
+                request_ts: ctx.accounts.pending_withdrawal.request_ts,
+                claim_deadline_ts: ctx.accounts.pending_withdrawal.claim_deadline_ts,
+            },
+            Clock::get()?.unix_timestamp,
+        )
+        .map_err(map_stake_error)?;
+    ctx.accounts.pending_withdrawal.claim_deadline_ts = migrated.claim_deadline_ts;
     Ok(())
 }
 

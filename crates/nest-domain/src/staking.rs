@@ -150,14 +150,15 @@ impl StakingPool {
             .request_ts
             .checked_add(self.cooldown_seconds)
             .ok_or(NestError::MathOverflow)?;
+        if pending.claim_deadline_ts == 0 {
+            return Err(NestError::LegacyWithdrawalNotMigrated);
+        }
         if now < unlock_ts {
             return Err(NestError::CooldownActive);
         }
-        if pending.claim_deadline_ts != 0 {
-            require_nonnegative_ts(pending.claim_deadline_ts)?;
-            if now > pending.claim_deadline_ts {
-                return Err(NestError::ClaimWindowExpired);
-            }
+        require_nonnegative_ts(pending.claim_deadline_ts)?;
+        if now > pending.claim_deadline_ts {
+            return Err(NestError::ClaimWindowExpired);
         }
         self.sync_vesting(now)?;
         if pending.shares == 0 || pending.shares > self.total_shares {
@@ -174,6 +175,34 @@ impl StakingPool {
         self.staking_vault_nusd = checked_sub(self.staking_vault_nusd, assets)?;
         self.unvested_revenue = checked_sub(self.unvested_revenue, unvested_redeemed)?;
         Ok(assets)
+    }
+
+    pub fn migrate_legacy_pending_unstake(
+        &self,
+        pending: PendingWithdrawal,
+        now: i64,
+    ) -> Result<PendingWithdrawal> {
+        require_nonnegative_ts(now)?;
+        require_nonnegative_ts(pending.request_ts)?;
+        require_nonnegative_ts(self.cooldown_seconds)?;
+        if pending.shares == 0
+            || pending.shares > self.total_shares
+            || pending.claim_deadline_ts != 0
+        {
+            return Err(NestError::InvalidParameter);
+        }
+        let unlock_ts = pending
+            .request_ts
+            .checked_add(self.cooldown_seconds)
+            .ok_or(NestError::MathOverflow)?;
+        let claim_start_ts = core::cmp::max(now, unlock_ts);
+        let claim_deadline_ts = claim_start_ts
+            .checked_add(UNSTAKE_CLAIM_WINDOW_SECONDS)
+            .ok_or(NestError::MathOverflow)?;
+        Ok(PendingWithdrawal {
+            claim_deadline_ts,
+            ..pending
+        })
     }
 
     pub fn cancel_expired_unstake(&self, pending: PendingWithdrawal, now: i64) -> Result<u128> {

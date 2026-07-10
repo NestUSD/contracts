@@ -1379,19 +1379,58 @@ fn staking_enforces_three_day_unstake_claim_window() {
 }
 
 #[test]
-fn staking_preserves_legacy_pending_withdrawal_completion() {
+fn staking_migrates_mature_legacy_withdrawal_to_fresh_claim_window() {
     let mut pool = StakingPool::default();
     pool.stake(100_000_000, 0, 0).unwrap();
-    let pending = PendingWithdrawal {
+    let legacy = PendingWithdrawal {
         shares: 25_000_000,
         request_ts: 10,
         claim_deadline_ts: 0,
     };
-
+    let migration_ts = 10 + DEFAULT_COOLDOWN_SECONDS * 10;
+    assert_eq!(
+        pool.complete_unstake(legacy, migration_ts),
+        Err(NestError::LegacyWithdrawalNotMigrated)
+    );
+    let pending = pool
+        .migrate_legacy_pending_unstake(legacy, migration_ts)
+        .unwrap();
+    assert_eq!(
+        pending.claim_deadline_ts,
+        migration_ts + UNSTAKE_CLAIM_WINDOW_SECONDS
+    );
     let assets = pool
-        .complete_unstake(pending, 10 + DEFAULT_COOLDOWN_SECONDS * 10)
+        .complete_unstake(pending, pending.claim_deadline_ts)
         .unwrap();
     assert_eq!(assets, 25_000_000);
+}
+
+#[test]
+fn staking_migrates_cooling_legacy_withdrawal_from_original_unlock() {
+    let mut pool = StakingPool::default();
+    pool.stake(100_000_000, 0, 0).unwrap();
+    let legacy = PendingWithdrawal {
+        shares: 25_000_000,
+        request_ts: 100,
+        claim_deadline_ts: 0,
+    };
+    let migration_ts = 200;
+    let pending = pool
+        .migrate_legacy_pending_unstake(legacy, migration_ts)
+        .unwrap();
+    let unlock_ts = legacy.request_ts + DEFAULT_COOLDOWN_SECONDS;
+    assert_eq!(
+        pending.claim_deadline_ts,
+        unlock_ts + UNSTAKE_CLAIM_WINDOW_SECONDS
+    );
+    assert_eq!(
+        pool.complete_unstake(pending, unlock_ts - 1),
+        Err(NestError::CooldownActive)
+    );
+    assert_eq!(
+        pool.complete_unstake(pending, unlock_ts).unwrap(),
+        25_000_000
+    );
 }
 
 #[test]
