@@ -284,6 +284,16 @@
     }
 
     #[test]
+    fn psm_redemption_is_blocked_until_bad_debt_is_covered() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.bad_debt_nusd = 1;
+        assert!(ix::psm::require_psm_redemption_solvent(&protocol).is_err());
+
+        protocol.bad_debt_nusd = 0;
+        assert!(ix::psm::require_psm_redemption_solvent(&protocol).is_ok());
+    }
+
+    #[test]
     fn psm_kamino_target_grid_never_requires_user_triggered_kamino_withdrawal() {
         for idle_usdc in [0_u128, 1, 9, 10, 100_000, 1_000_000, u64::MAX as u128] {
             for deployed_usdc in [0_u128, 1, 9, 10, 100_000, 1_000_000] {

@@ -1,5 +1,10 @@
 use crate::*;
 
+pub(crate) fn require_psm_redemption_solvent(protocol: &Protocol) -> Result<()> {
+    require!(protocol.bad_debt_nusd == 0, CoreError::BadDebtOutstanding);
+    Ok(())
+}
+
 pub fn psm_swap_in(ctx: Context<PsmSwapIn>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParameter);
     require!(!ctx.accounts.protocol.paused, CoreError::Paused);
@@ -67,6 +72,7 @@ pub fn psm_swap_in(ctx: Context<PsmSwapIn>, amount: u64) -> Result<()> {
 pub fn psm_swap_out(ctx: Context<PsmSwapOut>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParameter);
     require!(!ctx.accounts.protocol.paused, CoreError::Paused);
+    require_psm_redemption_solvent(&ctx.accounts.protocol)?;
     let amount_u128 = amount as u128;
     let now = Clock::get()?.unix_timestamp;
     let user_nusd_before = ctx.accounts.user_nusd_account.amount;
