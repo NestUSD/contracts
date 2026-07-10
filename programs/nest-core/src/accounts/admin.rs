@@ -33,6 +33,24 @@ pub struct SetStakerYieldParams<'info> {
 }
 
 #[derive(Accounts)]
+pub struct InitializeStakerRevenueAccounting<'info> {
+    #[account(mut, seeds = [b"protocol"], bump = protocol.bump, has_one = authority)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    #[account(address = protocol.nusd_mint)]
+    pub nusd_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        address = protocol.staker_revenue_nusd_vault,
+        token::mint = nusd_mint,
+        token::token_program = nusd_token_program,
+        constraint = staker_revenue_nusd_vault.owner == protocol.staker_revenue_authority @ CoreError::InvalidParameter
+    )]
+    pub staker_revenue_nusd_vault: InterfaceAccount<'info, TokenAccount>,
+    pub authority: Signer<'info>,
+    #[account(address = SPL_TOKEN_PROGRAM_ID)]
+    pub nusd_token_program: Interface<'info, TokenInterface>,
+}
+
+#[derive(Accounts)]
 pub struct SetPsmKaminoCollateralVault<'info> {
     #[account(mut, seeds = [b"protocol"], bump = protocol.bump, has_one = authority)]
     pub protocol: Box<Account<'info, Protocol>>,

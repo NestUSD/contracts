@@ -11,7 +11,7 @@ pub struct Protocol {
     pub staker_revenue_authority: Pubkey,
     pub total_debt: u128,
     pub total_uncollected_fees: u128,
-    /// Lifetime revenue routed to stakers. This is not an outstanding liability.
+    /// Revenue routed to stakers that has not yet been harvested.
     pub realized_revenue_for_stakers: u128,
     pub insurance_fund_nusd: u128,
     pub bad_debt_nusd: u128,
@@ -28,7 +28,8 @@ pub struct Protocol {
     pub kamino_program_id: Pubkey,
     pub insurance_target_bps: u16,
     pub insurance_fee_share_bps: u16,
-    pub reserved: bool,
+    /// Reuses the deployed reserved byte. Legacy accounts must be reconciled once.
+    pub staker_revenue_accounting_initialized: bool,
     pub paused: bool,
     pub bump: u8,
     pub protocol_revenue_nusd_vault: Pubkey,

@@ -291,7 +291,8 @@ pub fn liquidate_with_oracle(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
     )?;
-    require_new_staker_revenue_covered(
+    require_staker_revenue_covered(
+        &ctx.accounts.protocol,
         ctx.accounts.staker_revenue_nusd_vault.amount,
         staker_delta,
     )?;

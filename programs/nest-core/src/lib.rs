@@ -187,6 +187,10 @@ pub mod nest_core {
         ix::revenue::checkpoint_staker_target_revenue(ctx)
     }
 
+    pub fn consume_staker_revenue(ctx: Context<ConsumeStakerRevenue>, amount: u64) -> Result<()> {
+        ix::revenue::consume_staker_revenue(ctx, amount)
+    }
+
     pub fn absorb_staking_loss(ctx: Context<AbsorbStakingLoss>, amount: u64) -> Result<()> {
         ix::revenue::absorb_staking_loss(ctx, amount)
     }
@@ -232,6 +236,13 @@ pub mod nest_core {
             staker_target_apr_bps,
             staker_capacity_kamino_apr_bps,
         )
+    }
+
+    pub fn initialize_staker_revenue_accounting(
+        ctx: Context<InitializeStakerRevenueAccounting>,
+        outstanding_revenue: u64,
+    ) -> Result<()> {
+        ix::admin::initialize_staker_revenue_accounting(ctx, outstanding_revenue)
     }
 
     pub fn set_psm_kamino_collateral_vault(

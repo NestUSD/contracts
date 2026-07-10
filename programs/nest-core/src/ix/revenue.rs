@@ -12,6 +12,36 @@ pub fn checkpoint_staker_target_revenue(ctx: Context<CheckpointStakerTargetReven
     )
 }
 
+pub fn consume_staker_revenue(ctx: Context<ConsumeStakerRevenue>, amount: u64) -> Result<()> {
+    require!(amount > 0, CoreError::InvalidParameter);
+    let staking_assets = staking_vault_nusd_from_account(
+        &ctx.accounts.staking_state.to_account_info(),
+        ctx.accounts.protocol.nusd_mint,
+    )?;
+    sync_staker_target_revenue(
+        &mut ctx.accounts.protocol,
+        staking_assets,
+        Clock::get()?.unix_timestamp,
+    )?;
+    record_staker_revenue_consumption(&mut ctx.accounts.protocol, amount as u128)
+}
+
+pub(crate) fn record_staker_revenue_consumption(
+    protocol: &mut Protocol,
+    amount: u128,
+) -> Result<()> {
+    require!(amount > 0, CoreError::InvalidParameter);
+    require!(
+        protocol.staker_revenue_accounting_initialized,
+        CoreError::StakerRevenueAccountingNotInitialized
+    );
+    protocol.realized_revenue_for_stakers = protocol
+        .realized_revenue_for_stakers
+        .checked_sub(amount)
+        .ok_or(error!(CoreError::InvalidParameter))?;
+    Ok(())
+}
+
 pub fn absorb_staking_loss(ctx: Context<AbsorbStakingLoss>, amount: u64) -> Result<()> {
     require!(amount > 0, CoreError::InvalidParameter);
     record_staking_loss_absorption(&mut ctx.accounts.protocol, amount as u128)
@@ -111,7 +141,8 @@ pub fn realize_psm_yield(ctx: Context<RealizePsmYield>, amount: u64) -> Result<(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
     )?;
-    require_new_staker_revenue_covered(
+    require_staker_revenue_covered(
+        &ctx.accounts.protocol,
         ctx.accounts.staker_revenue_nusd_vault.amount,
         staker_delta_u64 as u128,
     )?;

@@ -95,6 +95,36 @@ pub fn set_staker_yield_params(
     Ok(())
 }
 
+pub fn initialize_staker_revenue_accounting(
+    ctx: Context<InitializeStakerRevenueAccounting>,
+    outstanding_revenue: u64,
+) -> Result<()> {
+    initialize_staker_revenue_accounting_state(
+        &mut ctx.accounts.protocol,
+        outstanding_revenue as u128,
+        ctx.accounts.staker_revenue_nusd_vault.amount as u128,
+    )
+}
+
+pub(crate) fn initialize_staker_revenue_accounting_state(
+    protocol: &mut Protocol,
+    outstanding_revenue: u128,
+    staker_revenue_vault_balance: u128,
+) -> Result<()> {
+    require!(protocol.paused, CoreError::ProtocolMustBePaused);
+    require!(
+        !protocol.staker_revenue_accounting_initialized,
+        CoreError::StakerRevenueAccountingAlreadyInitialized
+    );
+    require!(
+        outstanding_revenue <= staker_revenue_vault_balance,
+        CoreError::InvalidParameter
+    );
+    protocol.realized_revenue_for_stakers = outstanding_revenue;
+    protocol.staker_revenue_accounting_initialized = true;
+    Ok(())
+}
+
 pub fn set_psm_kamino_collateral_vault(ctx: Context<SetPsmKaminoCollateralVault>) -> Result<()> {
     require!(
         ctx.accounts.protocol.psm_kamino_collateral_vault == Pubkey::default()

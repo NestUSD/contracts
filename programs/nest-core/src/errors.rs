@@ -50,4 +50,10 @@ pub enum CoreError {
     InvalidPsmOutflowCircuitBreaker,
     #[msg("psm outflow circuit breaker limit exceeded")]
     PsmOutflowLimitExceeded,
+    #[msg("staker revenue accounting must be initialized")]
+    StakerRevenueAccountingNotInitialized,
+    #[msg("staker revenue accounting is already initialized")]
+    StakerRevenueAccountingAlreadyInitialized,
+    #[msg("protocol must be paused for this operation")]
+    ProtocolMustBePaused,
 }

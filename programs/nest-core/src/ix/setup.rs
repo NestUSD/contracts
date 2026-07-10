@@ -120,7 +120,7 @@ pub fn initialize_protocol(
     protocol.buyback_usdc_account = Pubkey::default();
     protocol.insurance_target_bps = domain::INSURANCE_TARGET_BPS;
     protocol.insurance_fee_share_bps = domain::INSURANCE_FEE_SHARE_BPS;
-    protocol.reserved = false;
+    protocol.staker_revenue_accounting_initialized = true;
     protocol.paused = false;
     protocol.bump = ctx.bumps.protocol;
     Ok(())

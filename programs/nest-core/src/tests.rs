@@ -277,7 +277,7 @@
             kamino_program_id: KLEND_PROGRAM_ID,
             insurance_target_bps: 0,
             insurance_fee_share_bps: 0,
-            reserved: false,
+            staker_revenue_accounting_initialized: true,
             paused: false,
             bump: 255,
             protocol_revenue_nusd_vault: Pubkey::new_unique(),
@@ -436,16 +436,60 @@
     }
 
     #[test]
-    fn cumulative_staker_revenue_is_not_treated_as_a_live_vault_liability() {
-        assert!(require_new_staker_revenue_covered(25, 25).is_ok());
-        assert!(require_new_staker_revenue_covered(24, 25).is_err());
+    fn staker_revenue_liability_tracks_only_unharvested_revenue() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.realized_revenue_for_stakers = 100;
 
+        assert!(require_staker_revenue_covered(&protocol, 100, 0).is_ok());
+        assert!(require_staker_revenue_covered(&protocol, 99, 0).is_err());
+        ix::revenue::record_staker_revenue_consumption(&mut protocol, 40).unwrap();
+        assert_eq!(protocol.realized_revenue_for_stakers, 60);
+        assert!(ix::revenue::record_staker_revenue_consumption(&mut protocol, 61).is_err());
+
+        protocol.staker_revenue_accounting_initialized = false;
+        assert!(require_staker_revenue_covered(&protocol, 25, 25).is_ok());
+        assert!(require_staker_revenue_covered(&protocol, 24, 25).is_err());
+        assert!(ix::revenue::record_staker_revenue_consumption(&mut protocol, 1).is_err());
+    }
+
+    #[test]
+    fn routed_staker_revenue_increases_outstanding_liability() {
         let mut protocol = protocol_for_psm_outflow_test();
         protocol.realized_revenue_for_stakers = 10_000;
         apply_realized_psm_yield_accounting(&mut protocol, 1_025, 25, 0, 10, false, false)
             .unwrap();
 
         assert_eq!(protocol.realized_revenue_for_stakers, 10_025);
+    }
+
+    #[test]
+    fn legacy_staker_revenue_accounting_requires_paused_one_time_reconciliation() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.staker_revenue_accounting_initialized = false;
+        protocol.realized_revenue_for_stakers = 10_000;
+
+        assert!(ix::admin::initialize_staker_revenue_accounting_state(
+            &mut protocol,
+            75,
+            100,
+        )
+        .is_err());
+        protocol.paused = true;
+        assert!(ix::admin::initialize_staker_revenue_accounting_state(
+            &mut protocol,
+            101,
+            100,
+        )
+        .is_err());
+        ix::admin::initialize_staker_revenue_accounting_state(&mut protocol, 75, 100).unwrap();
+        assert_eq!(protocol.realized_revenue_for_stakers, 75);
+        assert!(protocol.staker_revenue_accounting_initialized);
+        assert!(ix::admin::initialize_staker_revenue_accounting_state(
+            &mut protocol,
+            75,
+            100,
+        )
+        .is_err());
     }
 
     #[test]

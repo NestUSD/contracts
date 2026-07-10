@@ -130,9 +130,15 @@ fn require_recorded_amount_covered(actual_amount: u64, recorded_amount: u128) ->
     Ok(())
 }
 
-fn require_new_staker_revenue_covered(
+fn require_staker_revenue_covered(
+    protocol: &Protocol,
     staker_revenue_vault_balance: u64,
     newly_routed_revenue: u128,
 ) -> Result<()> {
-    require_recorded_amount_covered(staker_revenue_vault_balance, newly_routed_revenue)
+    let required = if protocol.staker_revenue_accounting_initialized {
+        protocol.realized_revenue_for_stakers
+    } else {
+        newly_routed_revenue
+    };
+    require_recorded_amount_covered(staker_revenue_vault_balance, required)
 }

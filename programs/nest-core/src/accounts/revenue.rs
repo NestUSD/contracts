@@ -57,6 +57,19 @@ pub struct CheckpointStakerTargetRevenue<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ConsumeStakerRevenue<'info> {
+    #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
+    pub protocol: Box<Account<'info, Protocol>>,
+    /// CHECK: Only nest-stake can sign for its canonical state PDA.
+    #[account(
+        signer,
+        owner = NEST_STAKE_PROGRAM_ID,
+        address = protocol.staker_revenue_authority
+    )]
+    pub staking_state: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
 pub struct AbsorbStakingLoss<'info> {
     #[account(mut, seeds = [b"protocol"], bump = protocol.bump)]
     pub protocol: Box<Account<'info, Protocol>>,
