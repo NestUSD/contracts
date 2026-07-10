@@ -806,6 +806,48 @@ fn full_liquidation_records_bad_debt_when_repay_exactly_exhausts_collateral() {
 }
 
 #[test]
+fn full_liquidation_cancels_fees_without_recording_them_as_bad_debt() {
+    let mut protocol = ProtocolAccounting::new();
+    protocol.insurance_fund_nusd = 50_000_000;
+    protocol.total_uncollected_fees = 10_000_000;
+    let mut vault = Vault {
+        collateral_raw: 10_800,
+        principal_debt: 100_000_000,
+        accrued_fee: 10_000_000,
+        last_accrual_ts: 0,
+    };
+    protocol.total_debt = vault.total_debt().unwrap();
+    let params = CollateralParams {
+        borrow_ltv_bps: 4_500,
+        liquidation_threshold_bps: 5_500,
+        liquidation_penalty_bps: 800,
+        close_factor_bps: 5_000,
+        ..CollateralParams::default()
+    };
+
+    let out = liquidate(
+        &mut vault,
+        &mut protocol,
+        1_080_000,
+        100 * PRICE_SCALE,
+        6,
+        params,
+        1_000_000,
+    )
+    .unwrap();
+
+    assert!(out.full_liquidation);
+    assert_eq!(out.fee_paid, 1_000_000);
+    assert_eq!(out.fee_cancelled, 9_000_000);
+    assert_eq!(out.insurance_nusd_burned, 50_000_000);
+    assert_eq!(out.bad_debt, 50_000_000);
+    assert_eq!(protocol.bad_debt_nusd, 50_000_000);
+    assert_eq!(protocol.total_uncollected_fees, 0);
+    assert_eq!(protocol.total_debt, 0);
+    assert_eq!(vault.total_debt().unwrap(), 0);
+}
+
+#[test]
 fn mixed_cdp_operations_preserve_protocol_debt_invariants() {
     let mut protocol = ProtocolAccounting::new();
     let params = CollateralParams {

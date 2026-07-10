@@ -145,6 +145,7 @@ pub struct LiquidationOutcome {
     pub keeper_collateral_raw: u128,
     pub insurance_collateral_raw: u128,
     pub insurance_nusd_burned: u128,
+    pub fee_cancelled: u128,
     pub bad_debt: u128,
     pub full_liquidation: bool,
 }
@@ -312,13 +313,19 @@ pub fn repay(
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct DebtWriteOff {
+    fee_cancelled: u128,
+    principal_cancelled: u128,
+}
+
 fn write_off_debt(
     vault: &mut Vault,
     protocol: &mut ProtocolAccounting,
     amount: u128,
-) -> Result<u128> {
+) -> Result<DebtWriteOff> {
     if amount == 0 {
-        return Ok(0);
+        return Ok(DebtWriteOff::default());
     }
     let debt = vault.total_debt()?;
     let writeoff = core::cmp::min(amount, debt);
@@ -331,7 +338,10 @@ fn write_off_debt(
     let principal_cancelled = core::cmp::min(remaining, vault.principal_debt);
     vault.principal_debt = checked_sub(vault.principal_debt, principal_cancelled)?;
     protocol.total_debt = checked_sub(protocol.total_debt, principal_cancelled)?;
-    checked_add(fee_cancelled, principal_cancelled)
+    Ok(DebtWriteOff {
+        fee_cancelled,
+        principal_cancelled,
+    })
 }
 
 pub fn max_liquidation_repay(
@@ -444,19 +454,30 @@ pub fn liquidate(
     vault.collateral_raw = checked_sub(vault.collateral_raw, keeper_raw)?;
 
     let mut insurance_nusd_burned = 0;
+    let mut fee_cancelled = 0;
     let mut bad_debt = 0;
     if full && exhausts_collateral && vault.collateral_raw == 0 {
-        let debt_after_repay = vault.total_debt()?;
-        insurance_nusd_burned = core::cmp::min(protocol.insurance_fund_nusd, debt_after_repay);
+        let fee_writeoff = write_off_debt(vault, protocol, vault.accrued_fee)?;
+        fee_cancelled = fee_writeoff.fee_cancelled;
+
+        insurance_nusd_burned = core::cmp::min(protocol.insurance_fund_nusd, vault.principal_debt);
         protocol.insurance_fund_nusd =
             checked_sub(protocol.insurance_fund_nusd, insurance_nusd_burned)?;
-        write_off_debt(vault, protocol, insurance_nusd_burned)?;
+        let insured_writeoff = write_off_debt(vault, protocol, insurance_nusd_burned)?;
+        if insured_writeoff.fee_cancelled != 0
+            || insured_writeoff.principal_cancelled != insurance_nusd_burned
+        {
+            return Err(NestError::MathOverflow);
+        }
 
-        let uncovered = vault.total_debt()?;
+        let uncovered = vault.principal_debt;
         if uncovered > 0 {
-            write_off_debt(vault, protocol, uncovered)?;
-            protocol.bad_debt_nusd = checked_add(protocol.bad_debt_nusd, uncovered)?;
-            bad_debt = uncovered;
+            let uncovered_writeoff = write_off_debt(vault, protocol, uncovered)?;
+            if uncovered_writeoff.fee_cancelled != 0 {
+                return Err(NestError::MathOverflow);
+            }
+            bad_debt = uncovered_writeoff.principal_cancelled;
+            protocol.bad_debt_nusd = checked_add(protocol.bad_debt_nusd, bad_debt)?;
         }
     }
 
@@ -468,6 +489,7 @@ pub fn liquidate(
         keeper_collateral_raw: keeper_raw,
         insurance_collateral_raw: 0,
         insurance_nusd_burned,
+        fee_cancelled,
         bad_debt,
         full_liquidation: full,
     })

@@ -85,6 +85,7 @@ pub fn liquidate_with_oracle(
     let debt_reduction = out
         .insurance_nusd_burned
         .checked_add(out.bad_debt)
+        .and_then(|amount| amount.checked_add(out.fee_cancelled))
         .and_then(|amount| amount.checked_add(repaid_debt_reduction))
         .ok_or(error!(CoreError::MathOverflow))?;
     ctx.accounts.collateral_config.total_debt = ctx
