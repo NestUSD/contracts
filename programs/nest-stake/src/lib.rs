@@ -11,9 +11,11 @@ declare_id!("EdYg6JsyntWpf3WGofNWKzBYnQPEvWFZSzUNim3PLbhB");
 const NEST_CORE_PROGRAM_ID: Pubkey = pubkey!("HxbLPNuQD7KKDVQoSQgY1cLMLrsaoseT65Xoczh7zHQW");
 const STABLECOIN_DECIMALS: u8 = 6;
 const CORE_PROTOCOL_DISCRIMINATOR: [u8; 8] = [45, 39, 101, 43, 115, 72, 131, 40];
+const CORE_PROTOCOL_AUTHORITY_OFFSET: usize = 8;
 const CORE_PROTOCOL_NUSD_MINT_OFFSET: usize = 72;
 const CORE_PROTOCOL_TOTAL_DEBT_OFFSET: usize = 264;
 const CORE_PROTOCOL_INSURANCE_FUND_NUSD_OFFSET: usize = 312;
+const CORE_PROTOCOL_BAD_DEBT_NUSD_OFFSET: usize = 328;
 const CORE_PROTOCOL_PSM_IDLE_USDC_OFFSET: usize = 376;
 const CORE_PROTOCOL_PSM_KAMINO_DEPLOYED_USDC_OFFSET: usize = 392;
 const CORE_PROTOCOL_STABILITY_FEE_APR_BPS_OFFSET: usize = 472;
@@ -49,6 +51,10 @@ pub mod nest_stake {
 
     pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
         instructions::complete_unstake(ctx)
+    }
+
+    pub fn cancel_expired_unstake(ctx: Context<CancelExpiredUnstake>) -> Result<()> {
+        instructions::cancel_expired_unstake(ctx)
     }
 
     pub fn realize_loss(ctx: Context<RealizeLoss>, amount: u64) -> Result<()> {
@@ -102,7 +108,7 @@ mod tests {
         kamino_program_id: Pubkey,
         insurance_target_bps: u16,
         insurance_fee_share_bps: u16,
-        reserved: bool,
+        staker_revenue_accounting_initialized: bool,
         paused: bool,
         bump: u8,
         protocol_revenue_nusd_vault: Pubkey,
@@ -115,6 +121,7 @@ mod tests {
 
     #[test]
     fn core_protocol_reader_offsets_match_serialized_layout() {
+        let authority = Pubkey::new_from_array([1; 32]);
         let nusd_mint = Pubkey::new_from_array([3; 32]);
         let total_debt = 0x0102_0304_0506_0708_1112_1314_1516_1718_u128;
         let insurance_fund_nusd = 0x2122_2324_2526_2728_3132_3334_3536_3738_u128;
@@ -126,7 +133,7 @@ mod tests {
         let staker_target_apr_bps = 1_234_u64;
         let staker_capacity_kamino_apr_bps = 5_678_u64;
         let protocol = ProtocolLayout {
-            authority: Pubkey::new_from_array([1; 32]),
+            authority,
             liquidation_authority: Pubkey::new_from_array([2; 32]),
             nusd_mint,
             usdc_mint: Pubkey::new_from_array([4; 32]),
@@ -152,7 +159,7 @@ mod tests {
             kamino_program_id: Pubkey::new_from_array([20; 32]),
             insurance_target_bps,
             insurance_fee_share_bps,
-            reserved: false,
+            staker_revenue_accounting_initialized: false,
             paused: true,
             bump: 21,
             protocol_revenue_nusd_vault: Pubkey::new_from_array([22; 32]),
@@ -167,6 +174,10 @@ mod tests {
 
         assert_eq!(data.get(0..8), Some(&CORE_PROTOCOL_DISCRIMINATOR[..]));
         assert_eq!(
+            read_pubkey_at(&data, CORE_PROTOCOL_AUTHORITY_OFFSET).unwrap(),
+            authority
+        );
+        assert_eq!(
             read_pubkey_at(&data, CORE_PROTOCOL_NUSD_MINT_OFFSET).unwrap(),
             nusd_mint
         );
@@ -177,6 +188,10 @@ mod tests {
         assert_eq!(
             read_u128_at(&data, CORE_PROTOCOL_INSURANCE_FUND_NUSD_OFFSET).unwrap(),
             insurance_fund_nusd
+        );
+        assert_eq!(
+            read_u128_at(&data, CORE_PROTOCOL_BAD_DEBT_NUSD_OFFSET).unwrap(),
+            12
         );
         assert_eq!(
             read_u128_at(&data, CORE_PROTOCOL_PSM_IDLE_USDC_OFFSET).unwrap(),
@@ -206,5 +221,10 @@ mod tests {
             read_u64_at(&data, CORE_PROTOCOL_STAKER_CAPACITY_KAMINO_APR_BPS_OFFSET).unwrap(),
             staker_capacity_kamino_apr_bps
         );
+    }
+
+    #[test]
+    fn pending_withdrawal_layout_remains_mainnet_compatible() {
+        assert_eq!(PendingWithdrawalAccount::INIT_SPACE, 106);
     }
 }

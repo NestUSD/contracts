@@ -4,10 +4,15 @@ pub fn initialize_staking(
     ctx: Context<InitializeStaking>,
     params: InitializeStakingParams,
 ) -> Result<()> {
-    staking_capacity_from_protocol(
+    let (protocol_authority, _) = staking_authority_and_capacity_from_protocol(
         &ctx.accounts.protocol.to_account_info(),
         ctx.accounts.nusd_mint.key(),
     )?;
+    require_keys_eq!(
+        protocol_authority,
+        ctx.accounts.authority.key(),
+        StakeError::Unauthorized
+    );
     let (expected_nusd_mint_authority, _) =
         Pubkey::find_program_address(&[b"protocol"], &NEST_CORE_PROGRAM_ID);
     require!(
@@ -69,6 +74,10 @@ pub fn stake(ctx: Context<Stake>, amount: u64, min_shares_out: u64) -> Result<()
         StakeError::InvalidParameter
     );
     require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
+    require_no_bad_debt(
+        &ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.nusd_mint,
+    )?;
     checkpoint_staker_target_revenue(
         ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.to_account_info(),
@@ -176,11 +185,12 @@ pub fn harvest(ctx: Context<Harvest>, amount: u64) -> Result<()> {
         ctx.accounts.staking_state.total_shares > 0,
         StakeError::InvalidParameter
     );
-    checkpoint_staker_target_revenue(
+    consume_staker_revenue(
         ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.to_account_info(),
         ctx.accounts.nest_core_program.to_account_info(),
         ctx.accounts.staking_state.bump,
+        amount,
     )?;
     let amount_u128 = amount as u128;
     let revenue_balance = ctx.accounts.revenue_nusd_account.amount as u128;
@@ -251,6 +261,8 @@ pub fn request_unstake(ctx: Context<RequestUnstake>, shares: u64) -> Result<()> 
     account.staking_state = ctx.accounts.staking_state.key();
     account.shares = pending.shares;
     account.request_ts = pending.request_ts;
+    account.claim_deadline_ts = pending.claim_deadline_ts;
+    account.reserved = 0;
     account.completed = false;
     account.bump = ctx.bumps.pending_withdrawal;
     let owner_snusd_before = ctx.accounts.owner_snusd_account.amount;
@@ -276,12 +288,23 @@ pub fn request_unstake(ctx: Context<RequestUnstake>, shares: u64) -> Result<()> 
 }
 
 pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
-    assert_authority(&ctx.accounts.staking_state, &ctx.accounts.authority)?;
     require!(!ctx.accounts.staking_state.paused, StakeError::Paused);
     require!(
         !ctx.accounts.pending_withdrawal.completed,
         StakeError::AlreadyCompleted
     );
+    if ctx.accounts.pending_withdrawal.claim_deadline_ts == 0 {
+        let authority = ctx
+            .accounts
+            .authority
+            .as_ref()
+            .ok_or(error!(StakeError::Unauthorized))?;
+        assert_authority(&ctx.accounts.staking_state, authority)?;
+    }
+    require_no_bad_debt(
+        &ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.staking_state.nusd_mint,
+    )?;
     checkpoint_staker_target_revenue(
         ctx.accounts.protocol.to_account_info(),
         ctx.accounts.staking_state.to_account_info(),
@@ -295,12 +318,12 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
             domain::PendingWithdrawal {
                 shares: ctx.accounts.pending_withdrawal.shares,
                 request_ts: ctx.accounts.pending_withdrawal.request_ts,
+                claim_deadline_ts: ctx.accounts.pending_withdrawal.claim_deadline_ts,
             },
             now,
         )
         .map_err(map_stake_error)?;
     apply_pool(&mut ctx.accounts.staking_state, pool);
-    ctx.accounts.pending_withdrawal.assets_redeemed = assets;
     ctx.accounts.pending_withdrawal.completed = true;
     let bump = [ctx.accounts.staking_state.bump];
     let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &bump]];
@@ -332,6 +355,63 @@ pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
     require_recorded_staking_vault_covered(
         ctx.accounts.staking_nusd_vault.amount,
         ctx.accounts.staking_state.staking_vault_nusd,
+    )?;
+    Ok(())
+}
+
+pub fn cancel_expired_unstake(ctx: Context<CancelExpiredUnstake>) -> Result<()> {
+    require!(
+        !ctx.accounts.pending_withdrawal.completed,
+        StakeError::AlreadyCompleted
+    );
+    let pool = domain_pool(&ctx.accounts.staking_state);
+    let shares = pool
+        .cancel_expired_unstake(
+            domain::PendingWithdrawal {
+                shares: ctx.accounts.pending_withdrawal.shares,
+                request_ts: ctx.accounts.pending_withdrawal.request_ts,
+                claim_deadline_ts: ctx.accounts.pending_withdrawal.claim_deadline_ts,
+            },
+            Clock::get()?.unix_timestamp,
+        )
+        .map_err(map_stake_error)?;
+    let new_total_user_shares = ctx
+        .accounts
+        .staking_state
+        .total_user_shares
+        .checked_add(shares)
+        .ok_or(error!(StakeError::MathOverflow))?;
+    require!(
+        new_total_user_shares <= ctx.accounts.staking_state.total_shares,
+        StakeError::InvalidParameter
+    );
+    ctx.accounts.staking_state.total_user_shares = new_total_user_shares;
+
+    let shares_u64 = u128_to_u64(shares)?;
+    let owner_snusd_before = ctx.accounts.owner_snusd_account.amount;
+    let snusd_supply_before = ctx.accounts.snusd_mint.supply;
+    let bump = [ctx.accounts.staking_state.bump];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &bump]];
+    token_mint_to_checked(
+        ctx.accounts.snusd_token_program.to_account_info(),
+        ctx.accounts.snusd_mint.to_account_info(),
+        ctx.accounts.owner_snusd_account.to_account_info(),
+        ctx.accounts.staking_state.to_account_info(),
+        shares_u64,
+        ctx.accounts.snusd_mint.decimals,
+        signer_seeds,
+    )?;
+    ctx.accounts.owner_snusd_account.reload()?;
+    ctx.accounts.snusd_mint.reload()?;
+    require_token_account_increase(
+        owner_snusd_before,
+        ctx.accounts.owner_snusd_account.amount,
+        shares_u64,
+    )?;
+    require_mint_supply_increase(
+        snusd_supply_before,
+        ctx.accounts.snusd_mint.supply,
+        shares_u64,
     )?;
     Ok(())
 }

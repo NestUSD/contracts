@@ -16,6 +16,8 @@ pub enum NestError {
     InsufficientCollateral,
     VaultHealthy,
     CooldownActive,
+    ClaimWindowActive,
+    ClaimWindowExpired,
     InsufficientAssets,
     Insolvent,
     PrincipalNotCovered,

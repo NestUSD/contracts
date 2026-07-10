@@ -45,6 +45,28 @@ fn checkpoint_staker_target_revenue<'info>(
     ))
 }
 
+fn consume_staker_revenue<'info>(
+    protocol: AccountInfo<'info>,
+    staking_state: AccountInfo<'info>,
+    nest_core_program: AccountInfo<'info>,
+    staking_bump: u8,
+    amount: u64,
+) -> Result<()> {
+    let bump = [staking_bump];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &bump]];
+    nest_core::cpi::consume_staker_revenue(
+        CpiContext::new_with_signer(
+            nest_core_program,
+            nest_core::cpi::accounts::ConsumeStakerRevenue {
+                protocol,
+                staking_state,
+            },
+            signer_seeds,
+        ),
+        amount,
+    )
+}
+
 fn absorb_staking_loss<'info>(
     protocol: AccountInfo<'info>,
     staking_state: AccountInfo<'info>,
@@ -67,38 +89,21 @@ fn absorb_staking_loss<'info>(
     )
 }
 
-fn staking_capacity_from_protocol(
+fn staking_authority_and_capacity_from_protocol(
     protocol: &AccountInfo,
     expected_nusd_mint: Pubkey,
-) -> Result<Option<u128>> {
-    // Staking reads only the core economics fields it needs to cap deposits.
-    // PDA, owner, discriminator, and nUSD mint checks guard the fixed offsets.
-    require_keys_eq!(
-        *protocol.owner,
-        NEST_CORE_PROGRAM_ID,
-        StakeError::InvalidParameter
-    );
-    let (expected_protocol, _) = Pubkey::find_program_address(&[b"protocol"], &NEST_CORE_PROGRAM_ID);
-    require_keys_eq!(
-        protocol.key(),
-        expected_protocol,
-        StakeError::InvalidParameter
-    );
-    let data = protocol.try_borrow_data()?;
-    require!(
-        data.len() >= CORE_PROTOCOL_STAKER_CAPACITY_KAMINO_APR_BPS_OFFSET + 8
-            && data.get(0..8) == Some(&CORE_PROTOCOL_DISCRIMINATOR),
-        StakeError::InvalidParameter
-    );
-    require_keys_eq!(
-        read_pubkey_at(&data, CORE_PROTOCOL_NUSD_MINT_OFFSET)?,
+) -> Result<(Pubkey, Option<u128>)> {
+    require_core_protocol_account(
+        protocol,
         expected_nusd_mint,
-        StakeError::InvalidParameter
-    );
+        CORE_PROTOCOL_STAKER_CAPACITY_KAMINO_APR_BPS_OFFSET + 8,
+    )?;
+    let data = protocol.try_borrow_data()?;
+    let authority = read_pubkey_at(&data, CORE_PROTOCOL_AUTHORITY_OFFSET)?;
 
     let target_apr_bps = read_u64_at(&data, CORE_PROTOCOL_STAKER_TARGET_APR_BPS_OFFSET)?;
     if target_apr_bps == 0 {
-        return Ok(None);
+        return Ok((authority, None));
     }
 
     let total_debt = read_u128_at(&data, CORE_PROTOCOL_TOTAL_DEBT_OFFSET)?;
@@ -152,7 +157,58 @@ fn staking_capacity_from_protocol(
         .ok_or(error!(StakeError::MathOverflow))?
         .checked_div(target_apr_bps as u128)
         .ok_or(error!(StakeError::MathOverflow))?;
-    Ok(Some(capacity))
+    Ok((authority, Some(capacity)))
+}
+
+fn require_core_protocol_account(
+    protocol: &AccountInfo,
+    expected_nusd_mint: Pubkey,
+    minimum_data_len: usize,
+) -> Result<()> {
+    require_keys_eq!(
+        *protocol.owner,
+        NEST_CORE_PROGRAM_ID,
+        StakeError::InvalidParameter
+    );
+    let (expected_protocol, _) = Pubkey::find_program_address(&[b"protocol"], &NEST_CORE_PROGRAM_ID);
+    require_keys_eq!(
+        protocol.key(),
+        expected_protocol,
+        StakeError::InvalidParameter
+    );
+    let data = protocol.try_borrow_data()?;
+    require!(
+        data.len() >= minimum_data_len
+            && data.get(0..8) == Some(&CORE_PROTOCOL_DISCRIMINATOR),
+        StakeError::InvalidParameter
+    );
+    require_keys_eq!(
+        read_pubkey_at(&data, CORE_PROTOCOL_NUSD_MINT_OFFSET)?,
+        expected_nusd_mint,
+        StakeError::InvalidParameter
+    );
+    Ok(())
+}
+
+fn require_no_bad_debt(protocol: &AccountInfo, expected_nusd_mint: Pubkey) -> Result<()> {
+    require_core_protocol_account(
+        protocol,
+        expected_nusd_mint,
+        CORE_PROTOCOL_BAD_DEBT_NUSD_OFFSET + 16,
+    )?;
+    let data = protocol.try_borrow_data()?;
+    require!(
+        read_u128_at(&data, CORE_PROTOCOL_BAD_DEBT_NUSD_OFFSET)? == 0,
+        StakeError::BadDebtOutstanding
+    );
+    Ok(())
+}
+
+fn staking_capacity_from_protocol(
+    protocol: &AccountInfo,
+    expected_nusd_mint: Pubkey,
+) -> Result<Option<u128>> {
+    Ok(staking_authority_and_capacity_from_protocol(protocol, expected_nusd_mint)?.1)
 }
 
 fn read_u128_at(data: &[u8], offset: usize) -> Result<u128> {
@@ -330,6 +386,8 @@ fn map_stake_error(error: domain::NestError) -> Error {
         }
         domain::NestError::InvalidParameter => error!(StakeError::InvalidParameter),
         domain::NestError::CooldownActive => error!(StakeError::CooldownActive),
+        domain::NestError::ClaimWindowActive => error!(StakeError::ClaimWindowActive),
+        domain::NestError::ClaimWindowExpired => error!(StakeError::ClaimWindowExpired),
         domain::NestError::InsufficientAssets => error!(StakeError::InsufficientAssets),
         domain::NestError::Insolvent => error!(StakeError::Insolvent),
         _ => error!(StakeError::InvalidParameter),

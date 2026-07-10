@@ -10,6 +10,12 @@ pub enum StakeError {
     InvalidParameter,
     #[msg("cooldown is still active")]
     CooldownActive,
+    #[msg("unstake claim window is still active")]
+    ClaimWindowActive,
+    #[msg("unstake claim window has expired")]
+    ClaimWindowExpired,
+    #[msg("protocol bad debt must be resolved before this operation")]
+    BadDebtOutstanding,
     #[msg("insufficient assets")]
     InsufficientAssets,
     #[msg("insolvent")]

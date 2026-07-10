@@ -2,7 +2,7 @@
 pub struct InitializeStaking<'info> {
     #[account(init, payer = authority, space = 8 + StakingState::INIT_SPACE, seeds = [b"staking"], bump)]
     pub staking_state: Box<Account<'info, StakingState>>,
-    /// CHECK: The initializer validates the canonical core PDA, owner, discriminator, and nUSD mint.
+    /// CHECK: The initializer validates the canonical core PDA, layout, nUSD mint, and authority.
     #[account(owner = NEST_CORE_PROGRAM_ID)]
     pub protocol: UncheckedAccount<'info>,
     pub nusd_mint: InterfaceAccount<'info, Mint>,
@@ -13,14 +13,6 @@ pub struct InitializeStaking<'info> {
     pub revenue_nusd_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        constraint = program.programdata_address()? == Some(program_data.key()) @ StakeError::Unauthorized
-    )]
-    pub program: Program<'info, crate::program::NestStake>,
-    #[account(
-        constraint = program_data.upgrade_authority_address == Some(authority.key()) @ StakeError::Unauthorized
-    )]
-    pub program_data: Account<'info, ProgramData>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
@@ -117,7 +109,7 @@ pub struct RequestUnstake<'info> {
 
 #[derive(Accounts)]
 pub struct CompleteUnstake<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump, has_one = authority)]
+    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
     pub staking_state: Box<Account<'info, StakingState>>,
     #[account(mut, has_one = owner, has_one = staking_state, close = owner)]
     pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
@@ -133,7 +125,24 @@ pub struct CompleteUnstake<'info> {
     pub nest_core_program: Program<'info, nest_core::program::NestCore>,
     #[account(mut)]
     pub owner: Signer<'info>,
-    pub authority: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
+    // Only pre-upgrade pending withdrawals require the legacy authority co-sign.
+    pub authority: Option<Signer<'info>>,
+}
+
+#[derive(Accounts)]
+pub struct CancelExpiredUnstake<'info> {
+    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
+    pub staking_state: Box<Account<'info, StakingState>>,
+    #[account(mut, has_one = owner, has_one = staking_state, close = owner)]
+    pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
+    #[account(mut, address = staking_state.snusd_mint)]
+    pub snusd_mint: InterfaceAccount<'info, Mint>,
+    #[account(mut, token::mint = snusd_mint, token::authority = owner, token::token_program = snusd_token_program)]
+    pub owner_snusd_account: InterfaceAccount<'info, TokenAccount>,
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(address = SPL_TOKEN_PROGRAM_ID)]
+    pub snusd_token_program: Interface<'info, TokenInterface>,
 }

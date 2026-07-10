@@ -29,7 +29,10 @@ pub struct PendingWithdrawalAccount {
     pub staking_state: Pubkey,
     pub shares: u128,
     pub request_ts: i64,
-    pub assets_redeemed: u128,
+    // Replaces the legacy assets_redeemed slot without changing account size.
+    // A zero deadline identifies a withdrawal created before claim windows.
+    pub claim_deadline_ts: i64,
+    pub reserved: u64,
     pub completed: bool,
     pub bump: u8,
 }
