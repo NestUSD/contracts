@@ -178,16 +178,19 @@ pub fn accrue_stability_fee(
     let denominator = BPS_DENOMINATOR
         .checked_mul(SECONDS_PER_YEAR)
         .ok_or(NestError::MathOverflow)?;
-    let fee = numerator
+    let mut fee = numerator
         .checked_div(denominator)
         .ok_or(NestError::DivisionByZero)?;
+    if fee == 0 && numerator > 0 {
+        fee = 1;
+    }
+    vault.last_accrual_ts = now;
     if fee == 0 {
         return Ok(0);
     }
     vault.accrued_fee = checked_add(vault.accrued_fee, fee)?;
     protocol.total_debt = checked_add(protocol.total_debt, fee)?;
     protocol.total_uncollected_fees = checked_add(protocol.total_uncollected_fees, fee)?;
-    vault.last_accrual_ts = now;
     Ok(fee)
 }
 

@@ -258,7 +258,7 @@ fn repay_grid_preserves_debt_and_fee_accounting() {
 }
 
 #[test]
-fn stability_fee_accrual_does_not_round_up_tiny_intervals() {
+fn stability_fee_accrual_rounds_positive_intervals_up_to_one_atomic_unit() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault {
         collateral_raw: 100,
@@ -270,24 +270,72 @@ fn stability_fee_accrual_does_not_round_up_tiny_intervals() {
 
     let too_early =
         accrue_stability_fee(&mut vault, &mut protocol, DEFAULT_STABILITY_FEE_BPS, 1).unwrap();
-    assert_eq!(too_early, 0);
-    assert_eq!(vault.last_accrual_ts, 0);
-    assert_eq!(vault.accrued_fee, 0);
-    assert_eq!(protocol.total_uncollected_fees, 0);
+    assert_eq!(too_early, 1);
+    assert_eq!(vault.last_accrual_ts, 1);
+    assert_eq!(vault.accrued_fee, 1);
+    assert_eq!(protocol.total_uncollected_fees, 1);
 
     let one_micro =
         accrue_stability_fee(&mut vault, &mut protocol, DEFAULT_STABILITY_FEE_BPS, 22).unwrap();
     assert_eq!(one_micro, 1);
     assert_eq!(vault.last_accrual_ts, 22);
-    assert_eq!(vault.accrued_fee, 1);
-    assert_eq!(protocol.total_uncollected_fees, 1);
+    assert_eq!(vault.accrued_fee, 2);
+    assert_eq!(protocol.total_uncollected_fees, 2);
 
-    let no_second_micro =
+    let second_micro =
         accrue_stability_fee(&mut vault, &mut protocol, DEFAULT_STABILITY_FEE_BPS, 23).unwrap();
-    assert_eq!(no_second_micro, 0);
-    assert_eq!(vault.last_accrual_ts, 22);
-    assert_eq!(vault.accrued_fee, 1);
-    assert_eq!(protocol.total_uncollected_fees, 1);
+    assert_eq!(second_micro, 1);
+    assert_eq!(vault.last_accrual_ts, 23);
+    assert_eq!(vault.accrued_fee, 3);
+    assert_eq!(protocol.total_uncollected_fees, 3);
+}
+
+#[test]
+fn rounded_fee_checkpoint_does_not_backdate_a_later_borrow() {
+    let mut protocol = ProtocolAccounting::new();
+    let mut vault = Vault {
+        collateral_raw: 1_000_000,
+        principal_debt: 1,
+        accrued_fee: 0,
+        last_accrual_ts: 0,
+    };
+    protocol.total_debt = 1;
+    let thirty_days = 30 * 24 * 60 * 60;
+
+    assert_eq!(
+        accrue_stability_fee(
+            &mut vault,
+            &mut protocol,
+            DEFAULT_STABILITY_FEE_BPS,
+            thirty_days,
+        )
+        .unwrap(),
+        1
+    );
+    let params = CollateralParams {
+        per_vault_debt_cap: 200_000_000_000,
+        protocol_debt_cap: 200_000_000_000,
+        collateral_debt_cap: 200_000_000_000,
+        ..CollateralParams::default()
+    };
+    borrow(
+        &mut vault,
+        &mut protocol,
+        1_000_000_000_000,
+        params,
+        100_000_000_000,
+    )
+    .unwrap();
+
+    let post_borrow_fee = accrue_stability_fee(
+        &mut vault,
+        &mut protocol,
+        DEFAULT_STABILITY_FEE_BPS,
+        thirty_days + 1,
+    )
+    .unwrap();
+    assert_eq!(post_borrow_fee, 47);
+    assert_eq!(vault.last_accrual_ts, thirty_days + 1);
 }
 
 #[test]
