@@ -130,14 +130,9 @@ fn require_recorded_amount_covered(actual_amount: u64, recorded_amount: u128) ->
     Ok(())
 }
 
-fn require_recorded_staker_revenue_covered(
-    unharvested_revenue: u64,
-    staking_assets: u128,
-    recorded_revenue: u128,
+fn require_new_staker_revenue_covered(
+    staker_revenue_vault_balance: u64,
+    newly_routed_revenue: u128,
 ) -> Result<()> {
-    let covered_assets = (unharvested_revenue as u128)
-        .checked_add(staking_assets)
-        .ok_or(error!(CoreError::MathOverflow))?;
-    require!(covered_assets >= recorded_revenue, CoreError::InvalidParameter);
-    Ok(())
+    require_recorded_amount_covered(staker_revenue_vault_balance, newly_routed_revenue)
 }

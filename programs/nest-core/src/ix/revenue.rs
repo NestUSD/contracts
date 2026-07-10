@@ -86,10 +86,9 @@ pub fn realize_psm_yield(ctx: Context<RealizePsmYield>, amount: u64) -> Result<(
         ctx.accounts.insurance_nusd_vault.amount,
         ctx.accounts.protocol.insurance_fund_nusd,
     )?;
-    require_recorded_staker_revenue_covered(
+    require_new_staker_revenue_covered(
         ctx.accounts.staker_revenue_nusd_vault.amount,
-        staking_assets,
-        ctx.accounts.protocol.realized_revenue_for_stakers,
+        staker_delta_u64 as u128,
     )?;
     require_recorded_amount_covered(
         ctx.accounts.protocol_revenue_nusd_vault.amount,

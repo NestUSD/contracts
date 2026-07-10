@@ -366,6 +366,19 @@
     }
 
     #[test]
+    fn cumulative_staker_revenue_is_not_treated_as_a_live_vault_liability() {
+        assert!(require_new_staker_revenue_covered(25, 25).is_ok());
+        assert!(require_new_staker_revenue_covered(24, 25).is_err());
+
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.realized_revenue_for_stakers = 10_000;
+        apply_realized_psm_yield_accounting(&mut protocol, 1_025, 25, 0, 10, false, false)
+            .unwrap();
+
+        assert_eq!(protocol.realized_revenue_for_stakers, 10_025);
+    }
+
+    #[test]
     fn liquidation_bad_debt_recovery_bypasses_pause_and_psm_cap() {
         let mut protocol = protocol_for_psm_outflow_test();
         protocol.paused = true;

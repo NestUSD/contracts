@@ -11,6 +11,7 @@ pub struct Protocol {
     pub staker_revenue_authority: Pubkey,
     pub total_debt: u128,
     pub total_uncollected_fees: u128,
+    /// Lifetime revenue routed to stakers. This is not an outstanding liability.
     pub realized_revenue_for_stakers: u128,
     pub insurance_fund_nusd: u128,
     pub bad_debt_nusd: u128,
