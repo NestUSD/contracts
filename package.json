@@ -6,6 +6,8 @@
   "scripts": {
     "test": "npm run test:domain",
     "test:domain": "cargo test -p nest-domain",
+    "test:core:revenue:idl": "node tests/nest-core-revenue-idl-surface.mjs",
+    "test:idl:surface": "npm run build:anchor && npm run test:core:revenue:idl",
     "check:programs": "cargo check -p nest-core && cargo check -p nest-stake",
     "test:workspace": "cargo test --workspace",
     "build:anchor": "anchor build",

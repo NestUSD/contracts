@@ -78,6 +78,79 @@ fn apply_realized_psm_yield_accounting(
         u128_to_u64(minted_nusd)?,
     ))
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProtocolRevenueAllocation {
+    bad_debt_repaid: u128,
+    insurance: u128,
+    stakers: u128,
+    protocol: u128,
+}
+
+fn apply_protocol_revenue_accounting(
+    protocol: &mut Protocol,
+    staking_assets: u128,
+    now: i64,
+    amount: u128,
+) -> Result<ProtocolRevenueAllocation> {
+    require!(amount > 0, CoreError::InvalidParameter);
+    require!(
+        protocol.staker_revenue_accounting_initialized,
+        CoreError::StakerRevenueAccountingNotInitialized
+    );
+    sync_staker_target_revenue(protocol, staking_assets, now)?;
+
+    let bad_debt_repaid = core::cmp::min(amount, protocol.bad_debt_nusd);
+    protocol.bad_debt_nusd = protocol
+        .bad_debt_nusd
+        .checked_sub(bad_debt_repaid)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    let distributable = amount
+        .checked_sub(bad_debt_repaid)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    if distributable == 0 {
+        return Ok(ProtocolRevenueAllocation {
+            bad_debt_repaid,
+            insurance: 0,
+            stakers: 0,
+            protocol: 0,
+        });
+    }
+
+    let insurance_before = protocol.insurance_fund_nusd;
+    let staker_before = protocol.realized_revenue_for_stakers;
+    let mut accounting = domain_protocol(protocol);
+    accounting
+        .route_realized_fee(distributable)
+        .map_err(map_core_error)?;
+    let insurance = accounting
+        .insurance_fund_nusd
+        .checked_sub(insurance_before)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    let raw_staker_revenue = accounting
+        .realized_revenue_for_stakers
+        .checked_sub(staker_before)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    accounting.realized_revenue_for_stakers = staker_before;
+    protocol.insurance_fund_nusd = accounting.insurance_fund_nusd;
+    protocol.realized_revenue_for_stakers = staker_before;
+    let (stakers, protocol_revenue) =
+        route_targeted_staker_revenue(protocol, staking_assets, now, raw_staker_revenue)?;
+
+    let allocated = bad_debt_repaid
+        .checked_add(insurance)
+        .and_then(|value| value.checked_add(stakers))
+        .and_then(|value| value.checked_add(protocol_revenue))
+        .ok_or(error!(CoreError::MathOverflow))?;
+    require!(allocated == amount, CoreError::MathOverflow);
+    Ok(ProtocolRevenueAllocation {
+        bad_debt_repaid,
+        insurance,
+        stakers,
+        protocol: protocol_revenue,
+    })
+}
+
 fn route_targeted_staker_revenue(
     protocol: &mut Protocol,
     staking_assets: u128,

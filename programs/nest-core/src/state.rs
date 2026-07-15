@@ -159,3 +159,15 @@ pub enum MarketStateAccount {
     Extended,
     Closed,
 }
+
+#[event]
+pub struct ProtocolRevenueDeposited {
+    pub protocol: Pubkey,
+    pub source: Pubkey,
+    pub source_nusd_account: Pubkey,
+    pub amount_nusd: u64,
+    pub bad_debt_repaid_nusd: u64,
+    pub insurance_nusd: u64,
+    pub staker_nusd: u64,
+    pub protocol_nusd: u64,
+}
