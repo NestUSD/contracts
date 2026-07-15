@@ -1739,6 +1739,46 @@ fn kamino_profit_slice_allows_positive_profit_without_touching_principal() {
 }
 
 #[test]
+fn kamino_principal_redemption_recognizes_full_position_loss() {
+    let redemption = account_kamino_principal_redemption(100, 100, 100, 80).unwrap();
+
+    assert_eq!(redemption.principal_removed, 100);
+    assert_eq!(redemption.principal_received, 80);
+    assert_eq!(redemption.principal_loss, 20);
+}
+
+#[test]
+fn kamino_principal_redemption_rounds_partial_basis_conservatively() {
+    let redemption = account_kamino_principal_redemption(100, 3, 1, 30).unwrap();
+
+    assert_eq!(redemption.principal_removed, 34);
+    assert_eq!(redemption.principal_received, 30);
+    assert_eq!(redemption.principal_loss, 4);
+    assert_eq!(100 - redemption.principal_removed, 66);
+
+    let profitable = account_kamino_principal_redemption(100, 100, 10, 12).unwrap();
+    assert_eq!(profitable.principal_removed, 10);
+    assert_eq!(profitable.principal_received, 10);
+    assert_eq!(profitable.principal_loss, 0);
+}
+
+#[test]
+fn kamino_principal_redemption_rejects_invalid_ctoken_amounts() {
+    assert_eq!(
+        account_kamino_principal_redemption(100, 0, 1, 1),
+        Err(NestError::InvalidParameter)
+    );
+    assert_eq!(
+        account_kamino_principal_redemption(100, 10, 0, 1),
+        Err(NestError::InvalidParameter)
+    );
+    assert_eq!(
+        account_kamino_principal_redemption(100, 10, 11, 1),
+        Err(NestError::InvalidParameter)
+    );
+}
+
+#[test]
 fn kamino_profit_slice_rejects_no_profit_redeem() {
     assert_eq!(
         verify_kamino_profit_slice(10_000_000, 90_000_000, 10_000_000, 100_000_000),
