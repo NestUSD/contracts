@@ -96,34 +96,42 @@ pub fn redeem_psm_usdc_from_kamino(ctx: Context<PsmKamino>, collateral_amount: u
         .ok_or(error!(CoreError::TransferFeeNotSupported))?;
     require!(usdc_received > 0, CoreError::TransferFeeNotSupported);
 
-    let principal_return = core::cmp::min(
+    record_psm_kamino_redemption(
+        &mut ctx.accounts.protocol,
+        kamino_collateral_before as u128,
+        collateral_amount as u128,
         usdc_received as u128,
-        ctx.accounts.protocol.psm_kamino_deployed_usdc,
-    );
-    let redeemed_surplus = (usdc_received as u128)
-        .checked_sub(principal_return)
-        .ok_or(error!(CoreError::MathOverflow))?;
-    require!(
-        principal_return
-            .checked_add(redeemed_surplus)
-            .ok_or(error!(CoreError::MathOverflow))?
-            == usdc_received as u128,
-        CoreError::MathOverflow
-    );
-    ctx.accounts.protocol.psm_kamino_deployed_usdc = ctx
-        .accounts
-        .protocol
-        .psm_kamino_deployed_usdc
-        .checked_sub(principal_return)
-        .ok_or(error!(CoreError::MathOverflow))?;
-    ctx.accounts.protocol.psm_idle_usdc = ctx
-        .accounts
-        .protocol
-        .psm_idle_usdc
-        .checked_add(principal_return)
-        .ok_or(error!(CoreError::MathOverflow))?;
+    )?;
     require_psm_accounting_invariants(&ctx.accounts.protocol, ctx.accounts.psm_usdc_vault.amount)?;
     Ok(())
+}
+
+pub(crate) fn record_psm_kamino_redemption(
+    protocol: &mut Protocol,
+    ctokens_before: u128,
+    redeemed_ctokens: u128,
+    usdc_received: u128,
+) -> Result<domain::KaminoPrincipalRedemption> {
+    let redemption = domain::account_kamino_principal_redemption(
+        protocol.psm_kamino_deployed_usdc,
+        ctokens_before,
+        redeemed_ctokens,
+        usdc_received,
+    )
+    .map_err(map_core_error)?;
+    protocol.psm_kamino_deployed_usdc = protocol
+        .psm_kamino_deployed_usdc
+        .checked_sub(redemption.principal_removed)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    protocol.psm_idle_usdc = protocol
+        .psm_idle_usdc
+        .checked_add(redemption.principal_received)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    protocol.bad_debt_nusd = protocol
+        .bad_debt_nusd
+        .checked_add(redemption.principal_loss)
+        .ok_or(error!(CoreError::MathOverflow))?;
+    Ok(redemption)
 }
 
 pub fn realize_psm_kamino_yield(

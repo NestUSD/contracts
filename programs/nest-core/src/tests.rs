@@ -324,6 +324,42 @@
     }
 
     #[test]
+    fn lossy_full_kamino_redemption_clears_deployed_principal_and_records_bad_debt() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.psm_kamino_deployed_usdc = 100;
+        let idle_before = protocol.psm_idle_usdc;
+
+        let redemption =
+            ix::kamino::record_psm_kamino_redemption(&mut protocol, 100, 100, 80).unwrap();
+
+        assert_eq!(redemption.principal_removed, 100);
+        assert_eq!(redemption.principal_received, 80);
+        assert_eq!(redemption.principal_loss, 20);
+        assert_eq!(protocol.psm_kamino_deployed_usdc, 0);
+        assert_eq!(protocol.psm_idle_usdc, idle_before + 80);
+        assert_eq!(protocol.bad_debt_nusd, 20);
+        assert!(ix::psm::require_psm_redemption_solvent(&protocol).is_err());
+    }
+
+    #[test]
+    fn partial_kamino_redemption_removes_pro_rata_principal() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.psm_idle_usdc = 10;
+        protocol.psm_kamino_deployed_usdc = 100;
+        protocol.bad_debt_nusd = 2;
+
+        let redemption =
+            ix::kamino::record_psm_kamino_redemption(&mut protocol, 3, 1, 30).unwrap();
+
+        assert_eq!(redemption.principal_removed, 34);
+        assert_eq!(redemption.principal_received, 30);
+        assert_eq!(redemption.principal_loss, 4);
+        assert_eq!(protocol.psm_kamino_deployed_usdc, 66);
+        assert_eq!(protocol.psm_idle_usdc, 40);
+        assert_eq!(protocol.bad_debt_nusd, 6);
+    }
+
+    #[test]
     fn staking_loss_retires_only_recorded_bad_debt() {
         let mut protocol = protocol_for_psm_outflow_test();
         protocol.bad_debt_nusd = 100;
