@@ -757,6 +757,71 @@ fn partial_liquidation_caps_repay_at_close_factor() {
 }
 
 #[test]
+fn liquidation_thresholds_use_exact_ratios_not_rounded_health_factors() {
+    let params = CollateralParams {
+        borrow_ltv_bps: 4_500,
+        liquidation_threshold_bps: 5_500,
+        liquidation_penalty_bps: 800,
+        close_factor_bps: 5_000,
+        full_liquidation_threshold_bps: 8_000,
+        ..CollateralParams::default()
+    };
+    let vault = Vault {
+        collateral_raw: 1,
+        principal_debt: 11_000,
+        accrued_fee: 0,
+        last_accrual_ts: 0,
+    };
+
+    let (below_repay, below_full) = max_liquidation_repay(vault, 15_999, params).unwrap();
+    assert_eq!(below_repay, 11_000);
+    assert!(below_full);
+
+    for collateral_value in [16_000_u128, 16_001] {
+        let (repay, full) = max_liquidation_repay(vault, collateral_value, params).unwrap();
+        assert_eq!(repay, 5_500);
+        assert!(!full);
+    }
+
+    let healthy_vault = Vault {
+        principal_debt: 5_500,
+        ..vault
+    };
+    assert_eq!(
+        max_liquidation_repay(healthy_vault, 10_000, params),
+        Err(NestError::VaultHealthy)
+    );
+}
+
+#[test]
+fn full_liquidation_boundary_does_not_use_floored_health_factor() {
+    let collateral_value = 1_454_545_454_547_u128;
+    let debt = 1_000_000_000_001_u128;
+    let params = CollateralParams {
+        liquidation_threshold_bps: 5_500,
+        liquidation_penalty_bps: 800,
+        close_factor_bps: 5_000,
+        full_liquidation_threshold_bps: 8_000,
+        ..CollateralParams::default()
+    };
+    let vault = Vault {
+        collateral_raw: collateral_value,
+        principal_debt: debt,
+        accrued_fee: 0,
+        last_accrual_ts: 0,
+    };
+
+    assert!(collateral_value * 5_500 > debt * 8_000);
+    assert_eq!(
+        health_factor_bps(collateral_value, debt, 5_500).unwrap(),
+        8_000
+    );
+    let (max_repay, full) = max_liquidation_repay(vault, collateral_value, params).unwrap();
+    assert_eq!(max_repay, 500_000_000_001);
+    assert!(!full);
+}
+
+#[test]
 fn liquidation_reports_actual_fee_and_principal_components() {
     let mut protocol = ProtocolAccounting::new();
     let mut vault = Vault {

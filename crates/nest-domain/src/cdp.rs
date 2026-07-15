@@ -206,12 +206,29 @@ pub fn health_factor_bps(
     if debt == 0 {
         return Ok(u128::MAX);
     }
-    let liq_limit = mul_div_down(
+    mul_div_down(
         collateral_value_usd,
         liquidation_threshold_bps as u128,
-        BPS_DENOMINATOR,
-    )?;
-    mul_div_down(liq_limit, BPS_DENOMINATOR, debt)
+        debt,
+    )
+}
+
+fn health_factor_at_least_bps(
+    collateral_value_usd: u128,
+    debt: u128,
+    liquidation_threshold_bps: u16,
+    required_health_factor_bps: u16,
+) -> Result<bool> {
+    if debt == 0 {
+        return Ok(true);
+    }
+    let collateral_side = collateral_value_usd
+        .checked_mul(liquidation_threshold_bps as u128)
+        .ok_or(NestError::MathOverflow)?;
+    let debt_side = debt
+        .checked_mul(required_health_factor_bps as u128)
+        .ok_or(NestError::MathOverflow)?;
+    Ok(collateral_side >= debt_side)
 }
 
 pub fn can_borrow(
@@ -383,12 +400,21 @@ pub fn max_liquidation_repay(
     params: CollateralParams,
 ) -> Result<(u128, bool)> {
     let debt = vault.total_debt()?;
-    let hf = health_factor_bps(collateral_value_usd, debt, params.liquidation_threshold_bps)?;
-    if hf >= BPS_DENOMINATOR {
+    if health_factor_at_least_bps(
+        collateral_value_usd,
+        debt,
+        params.liquidation_threshold_bps,
+        BPS_DENOMINATOR as u16,
+    )? {
         return Err(NestError::VaultHealthy);
     }
     let close_factor_repay = mul_div_up(debt, params.close_factor_bps as u128, BPS_DENOMINATOR)?;
-    let hard_full = hf < params.full_liquidation_threshold_bps as u128;
+    let hard_full = !health_factor_at_least_bps(
+        collateral_value_usd,
+        debt,
+        params.liquidation_threshold_bps,
+        params.full_liquidation_threshold_bps,
+    )?;
     let full = if hard_full || close_factor_repay >= debt {
         true
     } else {
@@ -423,12 +449,12 @@ fn partial_liquidation_would_remain_unhealthy(
         return Ok(true);
     }
     let remaining_collateral_value = checked_sub(collateral_value_usd, seized_value)?;
-    let remaining_hf = health_factor_bps(
+    Ok(!health_factor_at_least_bps(
         remaining_collateral_value,
         remaining_debt,
         params.liquidation_threshold_bps,
-    )?;
-    Ok(remaining_hf < BPS_DENOMINATOR)
+        BPS_DENOMINATOR as u16,
+    )?)
 }
 
 pub fn liquidate(
