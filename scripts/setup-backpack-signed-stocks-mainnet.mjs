@@ -6,11 +6,10 @@ import { createRequire } from "node:module";
 const contractsRoot = process.cwd();
 const repoRoot = path.resolve(contractsRoot, "..");
 const requireFromContracts = createRequire(path.join(contractsRoot, "package.json"));
-const requireFromV2 = createRequire(path.join(repoRoot, "v2", "package.json"));
 
 const anchor = requireFromContracts("@coral-xyz/anchor");
 const { Connection, Keypair, PublicKey, SystemProgram } = requireFromContracts("@solana/web3.js");
-const { createAccount, getMint, TOKEN_2022_PROGRAM_ID } = requireFromV2("@solana/spl-token");
+const { createAccount, getMint, TOKEN_2022_PROGRAM_ID } = requireFromContracts("@solana/spl-token");
 
 const deploymentPath = path.join(repoRoot, "deployments", "mainnet-v1.json");
 const idlPath = path.join(contractsRoot, "target", "idl", "nest_core.json");
@@ -143,14 +142,12 @@ const idl = readJson(idlPath);
 requireInstruction(idl, "set_nest_price_signer");
 requireInstruction(idl, "add_collateral");
 
+const rpcEndpoint = process.env.NEST_MAINNET_RPC?.trim();
+if (!rpcEndpoint) {
+  throw new Error("NEST_MAINNET_RPC is required; public and browser RPC fallbacks are disabled");
+}
 const payer = keypairFromJson(keypairPath);
-const connection = new Connection(
-  process.env.NEST_MAINNET_RPC
-    ?? process.env.NEXT_PUBLIC_NEST_RPC_ENDPOINT
-    ?? deployment.rpcEndpoint
-    ?? "https://api.mainnet-beta.solana.com",
-  "confirmed",
-);
+const connection = new Connection(rpcEndpoint, "confirmed");
 const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(payer), {
   commitment: "confirmed",
   preflightCommitment: "confirmed",
@@ -177,7 +174,7 @@ const artifact = fs.existsSync(artifactPath)
       signatures: {},
     };
 
-console.log("rpc", connection.rpcEndpoint);
+console.log("rpc configured via NEST_MAINNET_RPC");
 console.log("payer", payer.publicKey.toBase58());
 console.log("program", program.programId.toBase58());
 console.log("protocol", protocol.toBase58());
