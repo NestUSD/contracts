@@ -29,6 +29,26 @@ fn token_transfer_checked<'info>(
     }
 }
 
+fn probe_collateral_custody_transferability<'info>(
+    token_program: AccountInfo<'info>,
+    collateral_vault: AccountInfo<'info>,
+    collateral_mint: AccountInfo<'info>,
+    protocol: AccountInfo<'info>,
+    decimals: u8,
+    signer_seeds: &[&[&[u8]]],
+) -> Result<()> {
+    token_transfer_checked(
+        token_program,
+        collateral_vault.clone(),
+        collateral_mint,
+        collateral_vault,
+        protocol,
+        0,
+        decimals,
+        signer_seeds,
+    )
+}
+
 fn token_mint_to_checked<'info>(
     token_program: AccountInfo<'info>,
     mint: AccountInfo<'info>,
@@ -128,6 +148,14 @@ fn require_recorded_amount_covered(actual_amount: u64, recorded_amount: u128) ->
         CoreError::InvalidParameter
     );
     Ok(())
+}
+
+fn collateral_vault_coverage_broken(
+    actual_amount: u64,
+    recorded_amount: u128,
+    is_frozen: bool,
+) -> bool {
+    is_frozen || (actual_amount as u128) < recorded_amount
 }
 
 fn require_staker_revenue_covered(

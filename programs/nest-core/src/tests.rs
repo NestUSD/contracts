@@ -72,6 +72,15 @@
     }
 
     #[test]
+    fn collateral_coverage_breaker_trips_for_shortfall_or_frozen_custody() {
+        assert!(!collateral_vault_coverage_broken(1_000, 1_000, false));
+        assert!(!collateral_vault_coverage_broken(1_001, 1_000, false));
+        assert!(collateral_vault_coverage_broken(999, 1_000, false));
+        assert!(collateral_vault_coverage_broken(1_000, 1_000, true));
+        assert!(collateral_vault_coverage_broken(1_001, 1_000, true));
+    }
+
+    #[test]
     fn signed_price_message_uses_stable_borsh_layout() {
         let mut feed_id = [0_u8; 32];
         for (index, byte) in feed_id.iter_mut().enumerate() {

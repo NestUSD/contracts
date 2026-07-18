@@ -56,4 +56,6 @@ pub enum CoreError {
     StakerRevenueAccountingAlreadyInitialized,
     #[msg("protocol must be paused for this operation")]
     ProtocolMustBePaused,
+    #[msg("collateral custody account is frozen")]
+    CollateralCustodyFrozen,
 }

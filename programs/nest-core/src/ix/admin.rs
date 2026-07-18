@@ -192,8 +192,11 @@ pub fn trip_collateral_vault_coverage_breaker(
     ctx: Context<TripCollateralVaultCoverageBreaker>,
 ) -> Result<()> {
     require!(
-        (ctx.accounts.collateral_vault.amount as u128)
-            < ctx.accounts.collateral_config.total_deposits_raw,
+        collateral_vault_coverage_broken(
+            ctx.accounts.collateral_vault.amount,
+            ctx.accounts.collateral_config.total_deposits_raw,
+            ctx.accounts.collateral_vault.is_frozen(),
+        ),
         CoreError::InvalidParameter
     );
     ctx.accounts.collateral_config.deposits_paused = true;
