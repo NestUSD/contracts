@@ -21,3 +21,9 @@ anchor-lang.workspace = true
 anchor-spl.workspace = true
 nest-domain.workspace = true
 nest-core = { path = "../nest-core", features = ["cpi"] }
+
+[dev-dependencies]
+solana-program-test = "2.2.1"
+solana-sdk = "2.2.1"
+spl-token = { version = "7.0.0", features = ["no-entrypoint"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

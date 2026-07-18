@@ -14,10 +14,6 @@ pub enum StakeError {
     ClaimWindowActive,
     #[msg("unstake claim window has expired")]
     ClaimWindowExpired,
-    #[msg("legacy pending withdrawal must be migrated before completion")]
-    LegacyWithdrawalNotMigrated,
-    #[msg("staking must be paused for this operation")]
-    StakingMustBePaused,
     #[msg("protocol bad debt must be resolved before this operation")]
     BadDebtOutstanding,
     #[msg("insufficient assets")]

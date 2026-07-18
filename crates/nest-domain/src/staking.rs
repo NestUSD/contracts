@@ -1,6 +1,6 @@
 use crate::{
-    checked_add, checked_sub, mul_div_down, NestError, Result, DEFAULT_COOLDOWN_SECONDS,
-    DEFAULT_REVENUE_VESTING_SECONDS, MIN_INITIAL_STAKE_NUSD, UNSTAKE_CLAIM_WINDOW_SECONDS,
+    checked_add, checked_sub, mul_div_down, mul_div_up, NestError, Result, BPS_DENOMINATOR,
+    DEFAULT_REVENUE_VESTING_SECONDS, MIN_INITIAL_STAKE_NUSD, SECONDS_PER_DAY, SECONDS_PER_YEAR,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,7 +12,6 @@ pub struct StakingPool {
     pub vesting_start_ts: i64,
     pub vesting_end_ts: i64,
     pub last_vesting_sync_ts: i64,
-    pub cooldown_seconds: i64,
     pub revenue_vesting_seconds: i64,
 }
 
@@ -26,18 +25,29 @@ impl Default for StakingPool {
             vesting_start_ts: 0,
             vesting_end_ts: 0,
             last_vesting_sync_ts: 0,
-            cooldown_seconds: DEFAULT_COOLDOWN_SECONDS,
             revenue_vesting_seconds: DEFAULT_REVENUE_VESTING_SECONDS,
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PendingWithdrawal {
-    pub shares: u128,
-    pub request_ts: i64,
-    /// Zero identifies a withdrawal created before claim windows were introduced.
-    pub claim_deadline_ts: i64,
+pub struct InstantUnstakeSettlement {
+    pub gross_assets: u128,
+    pub fee_assets: u128,
+    pub net_assets: u128,
+}
+
+pub fn one_day_target_apr_fee(assets: u128, target_apr_bps: u64) -> Result<u128> {
+    let fee_denominator = BPS_DENOMINATOR
+        .checked_mul(SECONDS_PER_YEAR)
+        .ok_or(NestError::MathOverflow)?;
+    mul_div_up(
+        assets,
+        (target_apr_bps as u128)
+            .checked_mul(SECONDS_PER_DAY)
+            .ok_or(NestError::MathOverflow)?,
+        fee_denominator,
+    )
 }
 
 impl StakingPool {
@@ -124,101 +134,37 @@ impl StakingPool {
         Ok(())
     }
 
-    pub fn request_unstake(&mut self, shares: u128, now: i64) -> Result<PendingWithdrawal> {
+    pub fn instant_unstake(
+        &mut self,
+        shares: u128,
+        target_apr_bps: u64,
+        now: i64,
+    ) -> Result<InstantUnstakeSettlement> {
         require_nonnegative_ts(now)?;
-        require_nonnegative_ts(self.cooldown_seconds)?;
         self.sync_vesting(now)?;
         if shares == 0 || shares > self.total_shares {
             return Err(NestError::InvalidParameter);
         }
-        let claim_deadline_ts = now
-            .checked_add(self.cooldown_seconds)
-            .and_then(|value| value.checked_add(UNSTAKE_CLAIM_WINDOW_SECONDS))
-            .ok_or(NestError::MathOverflow)?;
-        Ok(PendingWithdrawal {
-            shares,
-            request_ts: now,
-            claim_deadline_ts,
-        })
-    }
-
-    pub fn complete_unstake(&mut self, pending: PendingWithdrawal, now: i64) -> Result<u128> {
-        require_nonnegative_ts(now)?;
-        require_nonnegative_ts(pending.request_ts)?;
-        require_nonnegative_ts(self.cooldown_seconds)?;
-        let unlock_ts = pending
-            .request_ts
-            .checked_add(self.cooldown_seconds)
-            .ok_or(NestError::MathOverflow)?;
-        if pending.claim_deadline_ts == 0 {
-            return Err(NestError::LegacyWithdrawalNotMigrated);
-        }
-        if now < unlock_ts {
-            return Err(NestError::CooldownActive);
-        }
-        require_nonnegative_ts(pending.claim_deadline_ts)?;
-        if now > pending.claim_deadline_ts {
-            return Err(NestError::ClaimWindowExpired);
-        }
-        self.sync_vesting(now)?;
-        if pending.shares == 0 || pending.shares > self.total_shares {
+        let redeemable_assets = checked_sub(self.staking_vault_nusd, self.reserved_pending_claims)?;
+        let gross_assets = mul_div_down(shares, redeemable_assets, self.total_shares)?;
+        let fee_assets = one_day_target_apr_fee(gross_assets, target_apr_bps)?;
+        let net_assets = checked_sub(gross_assets, fee_assets)?;
+        if net_assets == 0 {
             return Err(NestError::InvalidParameter);
         }
-        let redeemable_assets = checked_sub(self.staking_vault_nusd, self.reserved_pending_claims)?;
-        let assets = mul_div_down(pending.shares, redeemable_assets, self.total_shares)?;
-        let unvested_redeemed = if pending.shares == self.total_shares {
+        let unvested_redeemed = if shares == self.total_shares {
             self.unvested_revenue
         } else {
-            mul_div_down(pending.shares, self.unvested_revenue, self.total_shares)?
+            mul_div_down(shares, self.unvested_revenue, self.total_shares)?
         };
-        self.total_shares = checked_sub(self.total_shares, pending.shares)?;
-        self.staking_vault_nusd = checked_sub(self.staking_vault_nusd, assets)?;
+        self.total_shares = checked_sub(self.total_shares, shares)?;
+        self.staking_vault_nusd = checked_sub(self.staking_vault_nusd, gross_assets)?;
         self.unvested_revenue = checked_sub(self.unvested_revenue, unvested_redeemed)?;
-        Ok(assets)
-    }
-
-    pub fn migrate_legacy_pending_unstake(
-        &self,
-        pending: PendingWithdrawal,
-        now: i64,
-    ) -> Result<PendingWithdrawal> {
-        require_nonnegative_ts(now)?;
-        require_nonnegative_ts(pending.request_ts)?;
-        require_nonnegative_ts(self.cooldown_seconds)?;
-        if pending.shares == 0
-            || pending.shares > self.total_shares
-            || pending.claim_deadline_ts != 0
-        {
-            return Err(NestError::InvalidParameter);
-        }
-        let unlock_ts = pending
-            .request_ts
-            .checked_add(self.cooldown_seconds)
-            .ok_or(NestError::MathOverflow)?;
-        let claim_start_ts = core::cmp::max(now, unlock_ts);
-        let claim_deadline_ts = claim_start_ts
-            .checked_add(UNSTAKE_CLAIM_WINDOW_SECONDS)
-            .ok_or(NestError::MathOverflow)?;
-        Ok(PendingWithdrawal {
-            claim_deadline_ts,
-            ..pending
+        Ok(InstantUnstakeSettlement {
+            gross_assets,
+            fee_assets,
+            net_assets,
         })
-    }
-
-    pub fn cancel_expired_unstake(&self, pending: PendingWithdrawal, now: i64) -> Result<u128> {
-        require_nonnegative_ts(now)?;
-        require_nonnegative_ts(pending.request_ts)?;
-        if pending.shares == 0 || pending.shares > self.total_shares {
-            return Err(NestError::InvalidParameter);
-        }
-        if pending.claim_deadline_ts == 0 {
-            return Ok(pending.shares);
-        }
-        require_nonnegative_ts(pending.claim_deadline_ts)?;
-        if now <= pending.claim_deadline_ts {
-            return Err(NestError::ClaimWindowActive);
-        }
-        Ok(pending.shares)
     }
 
     pub fn realize_loss(&mut self, amount: u128) -> Result<()> {

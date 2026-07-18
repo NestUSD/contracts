@@ -2809,6 +2809,10 @@ dependencies = [
  "anchor-spl",
  "nest-core",
  "nest-domain",
+ "solana-program-test",
+ "solana-sdk",
+ "spl-token",
+ "tokio",
 ]
 
 [[package]]

@@ -12,7 +12,6 @@ fn domain_pool(state: &StakingState) -> domain::StakingPool {
         vesting_start_ts: state.vesting_start_ts,
         vesting_end_ts: state.vesting_end_ts,
         last_vesting_sync_ts: state.last_vesting_sync_ts,
-        cooldown_seconds: state.cooldown_seconds,
         revenue_vesting_seconds: state.revenue_vesting_seconds,
     }
 }
@@ -211,6 +210,19 @@ fn staking_capacity_from_protocol(
     Ok(staking_authority_and_capacity_from_protocol(protocol, expected_nusd_mint)?.1)
 }
 
+fn staker_target_apr_bps_from_protocol(
+    protocol: &AccountInfo,
+    expected_nusd_mint: Pubkey,
+) -> Result<u64> {
+    require_core_protocol_account(
+        protocol,
+        expected_nusd_mint,
+        CORE_PROTOCOL_STAKER_TARGET_APR_BPS_OFFSET + 8,
+    )?;
+    let data = protocol.try_borrow_data()?;
+    read_u64_at(&data, CORE_PROTOCOL_STAKER_TARGET_APR_BPS_OFFSET)
+}
+
 fn read_u128_at(data: &[u8], offset: usize) -> Result<u128> {
     let slice = data
         .get(offset..offset + 16)
@@ -385,12 +397,6 @@ fn map_stake_error(error: domain::NestError) -> Error {
             error!(StakeError::MathOverflow)
         }
         domain::NestError::InvalidParameter => error!(StakeError::InvalidParameter),
-        domain::NestError::CooldownActive => error!(StakeError::CooldownActive),
-        domain::NestError::ClaimWindowActive => error!(StakeError::ClaimWindowActive),
-        domain::NestError::ClaimWindowExpired => error!(StakeError::ClaimWindowExpired),
-        domain::NestError::LegacyWithdrawalNotMigrated => {
-            error!(StakeError::LegacyWithdrawalNotMigrated)
-        }
         domain::NestError::InsufficientAssets => error!(StakeError::InsufficientAssets),
         domain::NestError::Insolvent => error!(StakeError::Insolvent),
         _ => error!(StakeError::InvalidParameter),

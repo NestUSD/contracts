@@ -91,65 +91,26 @@ pub struct Harvest<'info> {
 }
 
 #[derive(Accounts)]
-pub struct RequestUnstake<'info> {
+pub struct Unstake<'info> {
     #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
     pub staking_state: Box<Account<'info, StakingState>>,
+    /// CHECK: Owned by nest-core; helpers validate the canonical protocol PDA and nUSD mint.
+    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
+    pub protocol: UncheckedAccount<'info>,
+    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
+    #[account(mut, address = staking_state.nusd_mint)]
+    pub nusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, address = staking_state.snusd_mint)]
     pub snusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, token::mint = snusd_mint, token::authority = owner, token::token_program = snusd_token_program)]
     pub owner_snusd_account: InterfaceAccount<'info, TokenAccount>,
-    #[account(init, payer = owner, space = 8 + PendingWithdrawalAccount::INIT_SPACE, seeds = [b"pending", owner.key().as_ref(), staking_state.key().as_ref()], bump)]
-    pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(address = SPL_TOKEN_PROGRAM_ID)]
-    pub snusd_token_program: Interface<'info, TokenInterface>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-pub struct CompleteUnstake<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
-    pub staking_state: Box<Account<'info, StakingState>>,
-    #[account(mut, has_one = owner, has_one = staking_state, close = owner)]
-    pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
-    #[account(mut, address = staking_state.nusd_mint)]
-    pub nusd_mint: InterfaceAccount<'info, Mint>,
     #[account(mut, address = staking_state.staking_nusd_vault, token::mint = nusd_mint, token::authority = staking_state, token::token_program = nusd_token_program)]
     pub staking_nusd_vault: InterfaceAccount<'info, TokenAccount>,
     #[account(mut, token::mint = nusd_mint, token::authority = owner, token::token_program = nusd_token_program)]
     pub owner_nusd_account: InterfaceAccount<'info, TokenAccount>,
-    /// CHECK: nest-core validates its canonical protocol PDA.
-    #[account(mut, owner = NEST_CORE_PROGRAM_ID)]
-    pub protocol: UncheckedAccount<'info>,
-    pub nest_core_program: Program<'info, nest_core::program::NestCore>,
-    #[account(mut)]
     pub owner: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub nusd_token_program: Interface<'info, TokenInterface>,
-}
-
-#[derive(Accounts)]
-pub struct MigrateLegacyPendingUnstake<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump, has_one = authority)]
-    pub staking_state: Box<Account<'info, StakingState>>,
-    #[account(mut, has_one = staking_state)]
-    pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
-    pub authority: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct CancelExpiredUnstake<'info> {
-    #[account(mut, seeds = [b"staking"], bump = staking_state.bump)]
-    pub staking_state: Box<Account<'info, StakingState>>,
-    #[account(mut, has_one = owner, has_one = staking_state, close = owner)]
-    pub pending_withdrawal: Box<Account<'info, PendingWithdrawalAccount>>,
-    #[account(mut, address = staking_state.snusd_mint)]
-    pub snusd_mint: InterfaceAccount<'info, Mint>,
-    #[account(mut, token::mint = snusd_mint, token::authority = owner, token::token_program = snusd_token_program)]
-    pub owner_snusd_account: InterfaceAccount<'info, TokenAccount>,
-    #[account(mut)]
-    pub owner: Signer<'info>,
     #[account(address = SPL_TOKEN_PROGRAM_ID)]
     pub snusd_token_program: Interface<'info, TokenInterface>,
 }

@@ -45,20 +45,8 @@ pub mod nest_stake {
         instructions::harvest(ctx, amount)
     }
 
-    pub fn request_unstake(ctx: Context<RequestUnstake>, shares: u64) -> Result<()> {
-        instructions::request_unstake(ctx, shares)
-    }
-
-    pub fn complete_unstake(ctx: Context<CompleteUnstake>) -> Result<()> {
-        instructions::complete_unstake(ctx)
-    }
-
-    pub fn migrate_legacy_pending_unstake(ctx: Context<MigrateLegacyPendingUnstake>) -> Result<()> {
-        instructions::migrate_legacy_pending_unstake(ctx)
-    }
-
-    pub fn cancel_expired_unstake(ctx: Context<CancelExpiredUnstake>) -> Result<()> {
-        instructions::cancel_expired_unstake(ctx)
+    pub fn unstake(ctx: Context<Unstake>, shares: u64, min_nusd_out: u64) -> Result<()> {
+        instructions::unstake(ctx, shares, min_nusd_out)
     }
 
     pub fn realize_loss(ctx: Context<RealizeLoss>, amount: u64) -> Result<()> {
@@ -228,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn pending_withdrawal_layout_remains_mainnet_compatible() {
-        assert_eq!(PendingWithdrawalAccount::INIT_SPACE, 106);
+    fn deployed_account_layouts_remain_compatible() {
+        assert_eq!(StakingState::INIT_SPACE, 314);
     }
 }

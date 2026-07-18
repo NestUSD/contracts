@@ -16,23 +16,9 @@ pub struct StakingState {
     pub vesting_start_ts: i64,
     pub vesting_end_ts: i64,
     pub last_vesting_sync_ts: i64,
+    // Retained only to preserve the deployed account layout.
     pub cooldown_seconds: i64,
     pub revenue_vesting_seconds: i64,
     pub paused: bool,
-    pub bump: u8,
-}
-
-#[account]
-#[derive(InitSpace)]
-pub struct PendingWithdrawalAccount {
-    pub owner: Pubkey,
-    pub staking_state: Pubkey,
-    pub shares: u128,
-    pub request_ts: i64,
-    // Replaces the legacy assets_redeemed slot without changing account size.
-    // A zero deadline identifies a withdrawal created before claim windows.
-    pub claim_deadline_ts: i64,
-    pub reserved: u64,
-    pub completed: bool,
     pub bump: u8,
 }
