@@ -177,6 +177,13 @@ pub mod nest_core {
         ix::revenue::realize_psm_yield(ctx, amount)
     }
 
+    pub fn deposit_protocol_revenue(
+        ctx: Context<DepositProtocolRevenue>,
+        amount: u64,
+    ) -> Result<()> {
+        ix::revenue::deposit_protocol_revenue(ctx, amount)
+    }
+
     pub fn cover_bad_debt(ctx: Context<CoverBadDebt>, amount: u64) -> Result<()> {
         ix::revenue::cover_bad_debt(ctx, amount)
     }

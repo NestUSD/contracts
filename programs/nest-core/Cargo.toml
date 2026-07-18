@@ -25,3 +25,10 @@ anchor-lang = { workspace = true, features = ["init-if-needed"] }
 anchor-spl.workspace = true
 nest-domain.workspace = true
 pyth-lazer-solana-contract = { version = "0.8.0", features = ["cpi"] }
+
+[dev-dependencies]
+solana-program-test = "2.2.1"
+solana-sdk = "2.2.1"
+spl-token = { version = "7.0.0", features = ["no-entrypoint"] }
+spl-token-2022 = { version = "7.0.0", features = ["no-entrypoint"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -72,6 +72,15 @@
     }
 
     #[test]
+    fn collateral_coverage_breaker_trips_for_shortfall_or_frozen_custody() {
+        assert!(!collateral_vault_coverage_broken(1_000, 1_000, false));
+        assert!(!collateral_vault_coverage_broken(1_001, 1_000, false));
+        assert!(collateral_vault_coverage_broken(999, 1_000, false));
+        assert!(collateral_vault_coverage_broken(1_000, 1_000, true));
+        assert!(collateral_vault_coverage_broken(1_001, 1_000, true));
+    }
+
+    #[test]
     fn signed_price_message_uses_stable_borsh_layout() {
         let mut feed_id = [0_u8; 32];
         for (index, byte) in feed_id.iter_mut().enumerate() {
@@ -387,6 +396,85 @@
         .unwrap();
 
         assert_eq!(protocol.staker_target_revenue_due, 15_000_000);
+    }
+
+    #[test]
+    fn protocol_revenue_retires_bad_debt_before_any_distribution() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.paused = true;
+        protocol.bad_debt_nusd = 75;
+        protocol.staker_target_apr_bps = 600;
+        protocol.staker_target_last_accrual_ts = 10;
+        protocol.staker_target_revenue_due = 25;
+
+        let allocation =
+            apply_protocol_revenue_accounting(&mut protocol, 1_000, 10, 50).unwrap();
+
+        assert_eq!(allocation.bad_debt_repaid, 50);
+        assert_eq!(allocation.insurance, 0);
+        assert_eq!(allocation.stakers, 0);
+        assert_eq!(allocation.protocol, 0);
+        assert_eq!(protocol.bad_debt_nusd, 25);
+        assert_eq!(protocol.staker_target_revenue_due, 25);
+        assert!(protocol.paused);
+    }
+
+    #[test]
+    fn protocol_revenue_routes_remainder_through_insurance_stakers_and_surplus() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.total_debt = 1_000;
+        protocol.bad_debt_nusd = 10;
+        protocol.insurance_target_bps = 1_000;
+        protocol.insurance_fee_share_bps = 2_000;
+        protocol.staker_target_apr_bps = 600;
+        protocol.staker_target_last_accrual_ts = 10;
+        protocol.staker_target_revenue_due = 30;
+
+        let allocation =
+            apply_protocol_revenue_accounting(&mut protocol, 1_000, 10, 100).unwrap();
+
+        assert_eq!(allocation.bad_debt_repaid, 10);
+        assert_eq!(allocation.insurance, 18);
+        assert_eq!(allocation.stakers, 30);
+        assert_eq!(allocation.protocol, 42);
+        assert_eq!(protocol.bad_debt_nusd, 0);
+        assert_eq!(protocol.insurance_fund_nusd, 18);
+        assert_eq!(protocol.staker_target_revenue_due, 0);
+        assert_eq!(protocol.realized_revenue_for_stakers, 30);
+        assert_eq!(protocol.realized_revenue_for_protocol, 42);
+    }
+
+    #[test]
+    fn protocol_revenue_skips_funded_insurance_and_fills_staker_target() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        protocol.total_debt = 1_000;
+        protocol.insurance_target_bps = 1_000;
+        protocol.insurance_fee_share_bps = 2_000;
+        protocol.insurance_fund_nusd = 100;
+        protocol.staker_target_apr_bps = 600;
+        protocol.staker_target_last_accrual_ts = 10;
+        protocol.staker_target_revenue_due = 100;
+
+        let allocation =
+            apply_protocol_revenue_accounting(&mut protocol, 1_000, 10, 40).unwrap();
+
+        assert_eq!(allocation.bad_debt_repaid, 0);
+        assert_eq!(allocation.insurance, 0);
+        assert_eq!(allocation.stakers, 40);
+        assert_eq!(allocation.protocol, 0);
+        assert_eq!(protocol.staker_target_revenue_due, 60);
+        assert_eq!(protocol.realized_revenue_for_stakers, 40);
+    }
+
+    #[test]
+    fn protocol_revenue_requires_initialized_accounting_and_nonzero_amount() {
+        let mut protocol = protocol_for_psm_outflow_test();
+        assert!(apply_protocol_revenue_accounting(&mut protocol, 0, 10, 0).is_err());
+
+        protocol.staker_revenue_accounting_initialized = false;
+        assert!(apply_protocol_revenue_accounting(&mut protocol, 0, 10, 1).is_err());
+        assert_eq!(protocol.realized_revenue_for_stakers, 0);
+        assert_eq!(protocol.realized_revenue_for_protocol, 0);
     }
 
     #[test]

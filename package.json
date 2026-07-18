@@ -6,6 +6,9 @@
   "scripts": {
     "test": "npm run test:domain",
     "test:domain": "cargo test -p nest-domain",
+    "test:core:revenue:idl": "node tests/nest-core-revenue-idl-surface.mjs",
+    "test:idl:surface": "npm run test:setup:security && npm run build:anchor && npm run test:core:revenue:idl",
+    "test:setup:security": "node tests/setup-script-security.mjs",
     "check:programs": "cargo check -p nest-core && cargo check -p nest-stake",
     "test:workspace": "cargo test --workspace",
     "build:anchor": "anchor build",
@@ -14,6 +17,7 @@
   },
   "devDependencies": {
     "@coral-xyz/anchor": "0.31.1",
+    "@solana/spl-token": "0.4.15",
     "@solana/web3.js": "^1.98.0",
     "@types/node": "^24.0.0",
     "typescript": "^5.8.3"

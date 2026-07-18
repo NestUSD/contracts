@@ -158,6 +158,20 @@ pub fn mint_nusd_with_oracle(ctx: Context<MintNusdWithOracle>, amount: u64) -> R
         ctx.accounts.collateral_vault.amount,
         ctx.accounts.collateral_config.total_deposits_raw,
     )?;
+    require!(
+        !ctx.accounts.collateral_vault.is_frozen(),
+        CoreError::CollateralCustodyFrozen
+    );
+    let bump = [ctx.accounts.protocol.bump];
+    let signer_seeds: &[&[&[u8]]] = &[&[b"protocol", &bump]];
+    probe_collateral_custody_transferability(
+        ctx.accounts.collateral_token_program.to_account_info(),
+        ctx.accounts.collateral_vault.to_account_info(),
+        ctx.accounts.collateral_mint.to_account_info(),
+        ctx.accounts.protocol.to_account_info(),
+        ctx.accounts.collateral_mint.decimals,
+        signer_seeds,
+    )?;
     let collateral_value = collateral_value_for_raw_from_snapshot(
         &ctx.accounts.collateral_config,
         &ctx.accounts.oracle,
@@ -183,8 +197,6 @@ pub fn mint_nusd_with_oracle(ctx: Context<MintNusdWithOracle>, amount: u64) -> R
         .total_debt
         .checked_add(amount as u128)
         .ok_or(error!(CoreError::MathOverflow))?;
-    let bump = [ctx.accounts.protocol.bump];
-    let signer_seeds: &[&[&[u8]]] = &[&[b"protocol", &bump]];
     let owner_nusd_before = ctx.accounts.owner_nusd_account.amount;
     let nusd_supply_before = ctx.accounts.nusd_mint.supply;
     token_mint_to_checked(
