@@ -47,6 +47,11 @@ assert.match(
   /\.setCollateralPaused\(true, true, true\)[\s\S]*?\.postInstructions\(\[pauseInstruction\]\)/,
   "new collateral must be created paused in the same transaction",
 );
+assert.match(
+  setupScript,
+  /waitForCollateralConfig[\s\S]*?collateral config is already active/,
+  "activation must tolerate RPC propagation lag and avoid resending an already-active market",
+);
 
 for (const [symbol, mint] of [
   ["BOT", "BoTx8y9ynfdxf5ZjWtCoBVkff52qKA82ysaLU8ZM6d8T"],

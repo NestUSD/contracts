@@ -229,6 +229,22 @@ async function fetchCollateralConfigWithRetry(address, attempts = 16) {
   throw lastError;
 }
 
+async function waitForCollateralConfig(address, predicate, attempts = 16) {
+  let lastConfig;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      lastConfig = await program.account.collateralConfig.fetch(address);
+      if (predicate(lastConfig)) return lastConfig;
+    } catch (error) {
+      lastError = error;
+    }
+    if (attempt < attempts) await delay(750);
+  }
+  if (lastConfig) return lastConfig;
+  throw lastError;
+}
+
 function requireInstruction(idl, name) {
   if (!idl.instructions.some((item) => item.name === name)) {
     throw new Error(`local IDL is missing ${name}; run npm run build:anchor first`);
@@ -456,20 +472,29 @@ for (const asset of selectedAssets) {
       if (creation && !creation.err) assetRecord.signatures.addCollateral = creation.signature;
     }
     if (unpauseExisting) {
-      console.log(asset.symbol, "unpausing reviewed collateral config");
-      const signature = await program.methods
-        .setCollateralPaused(false, false, false)
-        .accounts({ protocol, collateralConfig, authority: payer.publicKey })
-        .signers([payer])
-        .rpc();
-      const activeConfig = await fetchCollateralConfigWithRetry(collateralConfig);
+      const alreadyActive = !config.depositsPaused && !config.borrowsPaused && !config.withdrawsPaused;
+      let signature;
+      if (alreadyActive) {
+        console.log(asset.symbol, "collateral config is already active");
+      } else {
+        console.log(asset.symbol, "unpausing reviewed collateral config");
+        signature = await program.methods
+          .setCollateralPaused(false, false, false)
+          .accounts({ protocol, collateralConfig, authority: payer.publicKey })
+          .signers([payer])
+          .rpc();
+      }
+      const activeConfig = await waitForCollateralConfig(
+        collateralConfig,
+        (candidate) => !candidate.depositsPaused && !candidate.borrowsPaused && !candidate.withdrawsPaused,
+      );
       assertConfigMatches(asset, activeConfig, mint, mintInfo.decimals);
       if (activeConfig.depositsPaused || activeConfig.borrowsPaused || activeConfig.withdrawsPaused) {
         throw new Error(`${asset.symbol}: collateral remained paused after activation`);
       }
-      assetRecord.signatures.unpause = signature;
+      if (signature) assetRecord.signatures.unpause = signature;
       assetRecord.initiallyPaused = false;
-      console.log(asset.symbol, "unpause confirmed", signature);
+      console.log(asset.symbol, signature ? `unpause confirmed ${signature}` : "activation confirmed");
     } else {
       console.log(asset.symbol, "collateral config already exists and matches policy");
     }
@@ -546,7 +571,10 @@ for (const asset of selectedAssets) {
 
   assetRecord.signatures.addCollateral = signature;
   writeJson(artifactPath, artifact);
-  const createdConfig = await fetchCollateralConfigWithRetry(collateralConfig);
+  const createdConfig = await waitForCollateralConfig(
+    collateralConfig,
+    (candidate) => candidate.depositsPaused && candidate.borrowsPaused && candidate.withdrawsPaused,
+  );
   if (!createdConfig.depositsPaused || !createdConfig.borrowsPaused || !createdConfig.withdrawsPaused) {
     throw new Error(`${asset.symbol}: collateral was created without all pause flags enabled`);
   }
